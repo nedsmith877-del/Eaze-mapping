@@ -181,12 +181,28 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
     <!-- SALES MAP -->
     <section class="pane" id="pane-sales">
       <h2>Sales map</h2>
-      <p class="hint" style="font-size:13px">Add a sale price and date to each property (open it on the Properties tab), then build a map of your subject and the sales around it.</p>
+      <p class="hint" style="font-size:13px">Add each sale below with its lot/plan numbers, or use properties you've already mapped. Then pick your subject and press Show sales map.</p>
+      <h2>Add a sale</h2>
+      <label for="snName">Name to show on the map</label>
+      <input type="text" id="snName" placeholder="e.g. Sale 1: Example Downs">
+      <label for="snLots">Lot / plan numbers</label>
+      <textarea id="snLots" style="min-height:48px" placeholder="e.g. 3RP123456, 4RP123456 or 1/DP754321"></textarea>
+      <div class="salegrid">
+        <div><label for="snCat">Type</label><select id="snCat"><option value="sale">Sale</option><option value="forsale">For Sale</option><option value="quote">Quote</option><option value="subject">Subject</option></select></div>
+        <div><label for="snPrice">Price</label><input type="text" id="snPrice" inputmode="decimal" placeholder="e.g. 4.25m"></div>
+        <div><label for="snDate">Date</label><input type="date" id="snDate"></div>
+        <div><label for="snNotes">Notes</label><input type="text" id="snNotes" placeholder="optional"></div>
+      </div>
+      <label>Colour</label>
+      <div class="swatches" id="snCol"></div>
+      <div class="acts"><button class="btn" id="snAdd">Find &amp; add to sales map</button></div>
+
+      <h2>Map settings</h2>
       <label for="stitle">Map title</label>
       <input type="text" id="stitle" placeholder="e.g. Sales evidence: Example Station">
       <label for="ssubject">Subject property</label>
       <select id="ssubject"></select>
-      <label>Sales to show</label>
+      <label>Properties on the sales map (tick to show, click a name to edit it)</label>
       <div id="slist"></div>
       <label class="lyr" style="margin:6px 0 0;color:var(--text)"><input type="checkbox" id="sdist" checked><span>Show distance from subject</span></label>
       <label class="lyr" style="margin:0;color:var(--text)"><input type="checkbox" id="sprice" checked><span>Show price and $/ha on labels</span></label>
@@ -626,6 +642,7 @@ function saleEditor(p){
 
 /* ---------- sales map ---------- */
 const SKEY = KEY+'-sales';
+const labelOf = p=> (p.sale && p.sale.label) || p.name;
 let sState = load(SKEY, {title:'', subject:'', include:{}, dist:true, price:true});
 const salesLayer = L.layerGroup();
 const isSaleCat = p=> ['sale','forsale','quote'].includes(p.cat) || (p.sale&&p.sale.price&&p.cat!=='subject');
@@ -641,7 +658,7 @@ function salesPick(){
 function saleCard(n, p, color, showPrice, dist){
   const ha=p.area/10000, s=p.sale||{};
   const card = el('div',{className:'salecard',style:`border-left-color:${color}`},
-    el('div',null, el('span',{className:'num',style:`background:${color}`}, n), el('b',null,p.name)),
+    el('div',null, el('span',{className:'num',style:`background:${color}`}, n), el('b',null,labelOf(p))),
     el('div',null, `${(catById(p.cat)||{}).name||''} · ${fmt(ha,0)} ha`));
   if(showPrice && s.price) card.append(el('div',null, `${money(s.price)} · ${money(s.price/ha)}/ha`));
   if(s.date) card.append(el('div',null, fmtDate(s.date)));
@@ -694,7 +711,7 @@ function setSalesMode(on){
 }
 function salesTableData(){
   const {subj, rows} = salesPick();
-  const line = (n,p,dist)=>{ const ha=p.area/10000, s=p.sale||{}; return {n, p, name:p.name, cat:(catById(p.cat)||{}).name||'', date:fmtDate(s.date), price:s.price||null, ha, perha:s.price?s.price/ha:null, perac:s.price?s.price/(p.area/4046.8564224):null, dist, lots:p.lots.map(l=>l.id).join(', '), notes:s.notes||''}; };
+  const line = (n,p,dist)=>{ const ha=p.area/10000, s=p.sale||{}; return {n, p, name:labelOf(p), cat:(catById(p.cat)||{}).name||'', date:fmtDate(s.date), price:s.price||null, ha, perha:s.price?s.price/ha:null, perac:s.price?s.price/(p.area/4046.8564224):null, dist, lots:p.lots.map(l=>l.id).join(', '), notes:s.notes||''}; };
   return [subj? line('S',subj,null):null, ...rows.map(r=>line(r.n,r.p,r.dist))].filter(Boolean);
 }
 function renderSalesTab(){
@@ -703,16 +720,63 @@ function renderSalesTab(){
   if(!sState.subject){ const s=props.find(p=>p.cat==='subject'); if(s){ sState.subject=s.id; subjSel.value=s.id; } }
   $('#stitle').value = sState.title||'';
   $('#sdist').checked = sState.dist!==false; $('#sprice').checked = sState.price!==false;
-  const others = props.filter(p=>p.id!==sState.subject);
-  $('#slist').replaceChildren(...(others.length? others.map(p=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'},
-      el('input',{type:'checkbox',checked: sState.include[p.id] ?? isSaleCat(p), onchange:e=>{ sState.include[p.id]=e.target.checked; store(SKEY,sState); refreshSales(); }}),
-      el('span',{className:'dot',style:`background:${p.color};width:12px;height:12px;flex:none`}),
-      el('span',null, p.name), el('span',{style:'flex:none;font-size:12px;color:var(--muted)'}, p.sale&&p.sale.price? money(p.sale.price) : 'no price'))) : [el('div',{className:'hint'},'Add some sale properties first.')]));
+  const ordered = [...props.filter(p=>p.id===sState.subject), ...props.filter(p=>p.id!==sState.subject)];
+  $('#slist').replaceChildren(...(ordered.length? ordered.map(p=> salesEntry(p)) : [el('div',{className:'hint'},'Nothing yet. Add a sale above.')]));
   const data = salesTableData();
   $('#stable').replaceChildren(data.length? el('table',{className:'tbl',style:'margin-top:12px'},
     el('thead',null, el('tr',null, ...['#','Property','Date','Price','ha','$/ha','km'].map(h=>el('th',null,h)))),
     el('tbody',null, data.map(d=> el('tr',null, el('td',null, el('span',{className:'dot',style:`background:${d.p.color};display:inline-block;width:10px;height:10px;margin-right:3px`}), d.n), el('td',null,d.name), el('td',null,d.date), el('td',null,money(d.price)), el('td',null,fmt(d.ha,0)), el('td',null,money(d.perha)), el('td',null,d.dist!=null?fmt(d.dist,1):''))))) : '');
 }
+let sOpen = null;
+function salesEntry(p){
+  p.sale = p.sale || {};
+  const isSubj = p.id===sState.subject;
+  const inc = isSubj || (sState.include[p.id] ?? isSaleCat(p));
+  const changed = ()=>{ save(); drawProp(p); renderList(); refreshSales(); };
+  const sw = el('div',{className:'swatches'}, PALETTE.map(c=> el('button',{type:'button',className:'sw'+(c.hex===p.color?' on':''),title:c.name+' '+c.hex,style:`background:${c.hex}`,onclick:()=>{ p.color=c.hex; changed(); }})));
+  const addIn = el('input',{type:'text',placeholder:'Add lot e.g. 5RP123456'});
+  const body = el('div',{className:'body'},
+    el('label',null,'Name on sales map'), el('input',{type:'text',value:labelOf(p),onchange:e=>{ p.sale.label=e.target.value.trim(); changed(); }}),
+    el('div',{className:'salegrid'},
+      el('div',null, el('label',null,'Type'), el('select',{onchange:e=>{ p.cat=e.target.value; const c=catById(p.cat); if(c) p.color=c.hex; if(p.cat==='subject'){ sState.subject=p.id; store(SKEY,sState); } changed(); }}, CATEGORIES.map(c=> el('option',{value:c.id,selected:c.id===p.cat}, c.name)))),
+      el('div',null, el('label',null,'Price'), el('input',{type:'text',inputMode:'decimal',value:p.sale.price?Math.round(p.sale.price).toLocaleString('en-AU'):'',placeholder:'e.g. 4.25m',onchange:e=>{ p.sale.price=parsePrice(e.target.value); changed(); }})),
+      el('div',null, el('label',null,'Date'), el('input',{type:'date',value:p.sale.date||'',onchange:e=>{ p.sale.date=e.target.value; changed(); }})),
+      el('div',null, el('label',null,'Notes'), el('input',{type:'text',value:p.sale.notes||'',onchange:e=>{ p.sale.notes=e.target.value; changed(); }}))),
+    el('label',null,'Colour'), sw,
+    el('label',null,`Lots (${fmt(p.area/10000)} ha)`),
+    el('div',{className:'hint',style:'margin-top:0'}, p.lots.map(l=> el('span',{style:'display:inline-flex;align-items:center;gap:3px;margin:0 8px 4px 0;background:#eef4f8;border-radius:4px;padding:2px 6px'}, `${l.state} ${l.id}`,
+      el('button',{type:'button',title:'Remove lot',style:'border:0;background:none;cursor:pointer;color:#b00020;padding:0 2px',onclick:()=>{ p.lots=p.lots.filter(x=>x!==l); recalc(p); changed(); }},'✕')))),
+    el('div',{className:'row',style:'margin-top:4px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, v.split(/[\n,;]+/), 'auto'); e.target.disabled=false; refreshSales(); }},'Add lot')),
+    el('div',{className:'acts'}, el('button',{className:'btn sec small',onclick:()=>zoomTo(p)},'Zoom to'),
+      isSubj? null : el('button',{className:'btn sec small',onclick:()=>{ sState.subject=p.id; store(SKEY,sState); refreshSales(); }},'Make subject')));
+  return el('div',{className:'prop'+(sOpen===p.id?' open':''),style:'margin-bottom:6px'},
+    el('div',{className:'top',style:'padding:7px 9px'},
+      isSubj ? el('span',{style:'font-size:11px;font-weight:700;color:var(--navy);width:16px'},'S')
+             : el('input',{type:'checkbox',checked:inc,style:'width:16px;height:16px;accent-color:var(--blue)',onclick:e=>e.stopPropagation(),onchange:e=>{ sState.include[p.id]=e.target.checked; store(SKEY,sState); refreshSales(); }}),
+      el('span',{className:'dot',style:`background:${p.color};width:14px;height:14px`}),
+      el('div',{style:'flex:1;min-width:0',onclick:()=>{ sOpen = sOpen===p.id?null:p.id; renderSalesTab(); }},
+        el('div',{className:'nm',style:'font-size:13px'}, labelOf(p)),
+        el('div',{className:'meta'}, `${isSubj?'Subject':(catById(p.cat)||{}).name||''} · ${fmt(p.area/10000,0)} ha${p.sale.date?' · '+fmtDate(p.sale.date):''}`)),
+      el('div',{className:'area',style:'font-size:12px',onclick:()=>{ sOpen = sOpen===p.id?null:p.id; renderSalesTab(); }}, p.sale.price? money(p.sale.price) : el('span',{style:'color:var(--muted);font-weight:400'},'add price'))),
+    body);
+}
+/* add-a-sale form */
+let snCat='sale', snCol=catById('sale').hex;
+function renderSnCol(){ $('#snCol').replaceChildren(...PALETTE.map(c=> el('button',{type:'button',className:'sw'+(c.hex===snCol?' on':''),title:c.name+' '+c.hex,style:`background:${c.hex}`,onclick:()=>{ snCol=c.hex; renderSnCol(); }}))); }
+$('#snCat').onchange=e=>{ snCat=e.target.value; snCol=catById(snCat).hex; renderSnCol(); };
+$('#snAdd').onclick=async ()=>{
+  const raws=$('#snLots').value.split(/[\n,;]+/).filter(x=>x.trim());
+  if(!raws.length){ toast('Enter the lot/plan numbers for this sale', true); return; }
+  const btn=$('#snAdd'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Looking up…');
+  const name=$('#snName').value.trim() || ((catById(snCat)||{}).name+' '+(props.filter(p=>p.cat===snCat).length+1));
+  const p={id:uid(), name, cat:snCat, color:snCol, fill:0.3, lots:[], area:0, created:Date.now(), sale:{label:name, price:parsePrice($('#snPrice').value), date:$('#snDate').value, notes:$('#snNotes').value.trim()}};
+  try{
+    const n = await addLotsTo(p, raws, 'auto');
+    if(n){ props.push(p); sState.include[p.id]=true; if(snCat==='subject') sState.subject=p.id; store(SKEY,sState); save(); drawProp(p); renderList();
+      ['#snName','#snLots','#snPrice','#snDate','#snNotes'].forEach(id=>$(id).value=''); refreshSales(); if(salesMode){ const b=salesBounds(); if(b) map.fitBounds(b,{padding:[60,60],maxZoom:15}); } }
+  } finally { btn.disabled=false; btn.textContent='Find & add to sales map'; }
+};
+renderSnCol();
 function refreshSales(){ renderSalesTab(); if(salesMode) renderSalesMap(); }
 $('#ssubject').onchange=e=>{ sState.subject=e.target.value; store(SKEY,sState); refreshSales(); };
 $('#stitle').onchange=e=>{ sState.title=e.target.value; store(SKEY,sState); };
