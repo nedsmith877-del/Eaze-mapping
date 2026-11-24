@@ -130,6 +130,17 @@ details summary{outline:none}
   #sidetoggle{top:12px;left:12px!important}
   header{padding:12px 16px 8px}
 }
+#snapbtn{position:absolute;z-index:1001;top:100px;right:10px;height:36px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);backdrop-filter:blur(12px);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#snapbtn:hover{background:rgba(0,159,223,.35)}
+#snapframe{position:absolute;z-index:1050;pointer-events:none;border:2px solid #fff;border-radius:4px;box-shadow:0 0 0 9999px rgba(3,10,18,.55),0 0 24px rgba(0,159,223,.6);display:none}
+#snapframe .tag{position:absolute;left:8px;top:8px;background:rgba(7,20,34,.8);color:#fff;font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px}
+#snapframe .c{position:absolute;width:18px;height:18px;border:3px solid var(--blue2)}
+#snapframe .c1{left:-3px;top:-3px;border-right:0;border-bottom:0}#snapframe .c2{right:-3px;top:-3px;border-left:0;border-bottom:0}
+#snapframe .c3{left:-3px;bottom:-3px;border-right:0;border-top:0}#snapframe .c4{right:-3px;bottom:-3px;border-left:0;border-top:0}
+#snapbar{position:absolute;z-index:1060;display:none;gap:8px;align-items:center;padding:8px;border-radius:14px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#snapbar select{width:auto;padding:7px 10px;font-size:12.5px}
+body.snapping .leaflet-control-zoom{z-index:1070;position:relative}
+body.snapping #snapbtn{display:none}
 #printsheet{display:none}
 .salelbl{background:transparent;border:0}
 .salecard{background:#fff;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.35);padding:5px 8px 6px;font-size:11.5px;line-height:1.35;color:#1b2a38;white-space:nowrap;border-left:5px solid var(--blue);transform:translate(-50%,-50%);display:inline-block}
@@ -274,6 +285,14 @@ details summary{outline:none}
     </section>
   </aside>
   <button id="sidetoggle" title="Hide / show panel">⟨</button>
+  <button id="snapbtn" title="Take a 4:3 picture of the map">📷 Snapshot</button>
+  <div id="snapframe"><span class="tag">4:3 · zoom and drag the map to frame it</span><i class="c c1"></i><i class="c c2"></i><i class="c c3"></i><i class="c c4"></i></div>
+  <div id="snapbar">
+    <select id="snapsize" title="Image size"><option value="1600">1600 × 1200</option><option value="2400">2400 × 1800 (high quality)</option><option value="1024">1024 × 768</option></select>
+    <button class="btn small" id="snapsave">Save image</button>
+    <button class="btn sec small" id="snapcopy">Copy</button>
+    <button class="btn sec small" id="snapclose">Done</button>
+  </div>
   <div id="map"></div>
 </div>
 <div id="printsheet"></div>
@@ -486,7 +505,7 @@ const save = ()=> store(KEY, props);
 /* ---------- map ---------- */
 const map = L.map('map', {zoomControl:false, preferCanvas:false}).setView([-25.5, 147.5], 5);
 const ESRI_IMG = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const tl = (u,o)=> L.tileLayer(u, Object.assign({maxZoom:21, maxNativeZoom:19}, o||{}));
+const tl = (u,o)=> L.tileLayer(u, Object.assign({maxZoom:21, maxNativeZoom:19, crossOrigin:'anonymous'}, o||{}));
 const ESRI = n=> `https://server.arcgisonline.com/ArcGIS/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
 const GOV_IMG = ()=> [
     tl(ESRI_IMG,{attribution:'&copy; Esri'}),
@@ -502,7 +521,7 @@ const BASE_DEFS = [
   {name:'Terrain (Google terrain style)', labels:false, make:()=> tl(ESRI('World_Topo_Map'),{attribution:'&copy; Esri'})}
 ];
 const BASES = {};
-const LABELS = L.tileLayer(ESRI('Reference/World_Boundaries_and_Places'), {maxZoom:21, maxNativeZoom:19, pane:'overlayPane'});
+const LABELS = L.tileLayer(ESRI('Reference/World_Boundaries_and_Places'), {maxZoom:21, maxNativeZoom:19, pane:'overlayPane', crossOrigin:'anonymous'});
 async function getBase(name){
   if(BASES[name]) return BASES[name];
   const d = BASE_DEFS.find(x=>x.name===name) || BASE_DEFS[0];
@@ -855,6 +874,107 @@ $('#scsv').onclick=()=>{
   download(`sales-table-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
 };
 $('#skml').onclick=()=>{ const d=salesTableData(); if(!d.length){ toast('Nothing to export', true); return; } const lab=new Map(d.map(x=>[x.p, (x.n==='S'?'Subject: ':x.n+'. ')+x.name+(sState.price&&x.price?' ('+money(x.price)+')':'')])); download(`sales-map-${stamp()}.kml`, buildKML(d.map(x=>x.p), sState.title||'Sales map', p=>lab.get(p)),'application/vnd.google-earth.kml+xml'); };
+
+/* ---------- 4:3 snapshot ---------- */
+let snapOn=false;
+function snapRect(){
+  const m = $('#map').getBoundingClientRect();
+  const side = $('#side'); const sr = side.getBoundingClientRect();
+  const sideOpen = !side.classList.contains('hidden') && window.innerWidth>760;
+  const left = sideOpen ? sr.right + 20 : 20, right = m.width - 64, top = 24, bottom = m.height - 90;
+  let w = right-left, h = bottom-top;
+  if(w/h > 4/3) w = h*4/3; else h = w*3/4;
+  const x = left + ((right-left)-w)/2, y = top + ((bottom-top)-h)/2;
+  return {x:Math.round(x), y:Math.round(y), w:Math.round(w), h:Math.round(h)};
+}
+function placeSnap(){
+  if(!snapOn) return;
+  const r=snapRect(), f=$('#snapframe'), b=$('#snapbar');
+  Object.assign(f.style,{left:r.x+'px',top:r.y+'px',width:r.w+'px',height:r.h+'px',display:'block'});
+  b.style.display='flex'; b.style.top=(r.y+r.h+12)+'px'; b.style.left=(r.x + r.w/2 - b.offsetWidth/2)+'px';
+}
+function setSnap(on){
+  snapOn=on; document.body.classList.toggle('snapping',on);
+  $('#snapframe').style.display = on?'block':'none'; $('#snapbar').style.display = on?'flex':'none';
+  $('#snapbtn').textContent = on ? '✕ Close snapshot' : '📷 Snapshot';
+  if(on){ placeSnap(); fitToFrameIfEmpty(); }
+}
+// When opening the frame, bring the properties into it if none are showing inside the frame
+function fitToFrameIfEmpty(){
+  try{
+    const b = salesMode ? salesBounds() : (props.length ? propGroup.getBounds() : null);
+    if(!b || !b.isValid()) return;
+    const r=snapRect(), s=map.getSize();
+    const fb = L.latLngBounds(map.containerPointToLatLng([r.x, r.y+r.h]), map.containerPointToLatLng([r.x+r.w, r.y]));
+    if(fb.intersects(b)) return;
+    map.fitBounds(b, {paddingTopLeft:[r.x+30, r.y+30], paddingBottomRight:[s.x-(r.x+r.w)+30, s.y-(r.y+r.h)+30], maxZoom:16});
+  }catch(e){}
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && snapOn) setSnap(false); });
+$('#snapbtn').onclick=()=> setSnap(!snapOn);
+$('#snapclose').onclick=()=> setSnap(false);
+window.addEventListener('resize', placeSnap);
+$('#sidetoggle').addEventListener('click', ()=> setTimeout(placeSnap, 380));
+
+function rrect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function effOpacity(el, stop){ let o=1; for(let n=el; n && n!==stop; n=n.parentElement){ const v=parseFloat(getComputedStyle(n).opacity); if(!isNaN(v)) o*=v; } return o; }
+async function renderSnapshot(){
+  const outW = +$('#snapsize').value, outH = Math.round(outW*3/4);
+  const fr = snapRect(); const k = outW/fr.w;
+  const cont = map.getContainer(), cr = cont.getBoundingClientRect();
+  const cv = document.createElement('canvas'); cv.width=outW; cv.height=outH;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle='#0a1826'; ctx.fillRect(0,0,outW,outH);
+  const toFrame = r=> ({x:(r.left-cr.left-fr.x)*k, y:(r.top-cr.top-fr.y)*k, w:r.width*k, h:r.height*k});
+  const hit = r=> !(r.x>outW || r.y>outH || r.x+r.w<0 || r.y+r.h<0);
+  // 1. images (base tiles, labels, government overlays) in pane order
+  const imgs = [...cont.querySelectorAll('.leaflet-tile-pane img, .leaflet-overlay-pane img, .leaflet-pane img.leaflet-image-layer')];
+  const uniq = [...new Set(imgs)].filter(i=> i.complete && i.naturalWidth && getComputedStyle(i).visibility!=='hidden');
+  for(const im of uniq){ const r=toFrame(im.getBoundingClientRect()); if(!hit(r)) continue; ctx.globalAlpha=effOpacity(im, cont); try{ ctx.drawImage(im, r.x, r.y, r.w, r.h); }catch(e){} }
+  ctx.globalAlpha=1;
+  // 2. vector shapes (properties, sales lines) drawn from the map's SVG layers
+  for(const svg of cont.querySelectorAll('svg.leaflet-zoom-animated')){
+    const r=toFrame(svg.getBoundingClientRect()); if(!hit(r)) continue;
+    const clone=svg.cloneNode(true); clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+    clone.setAttribute('width', svg.getBoundingClientRect().width); clone.setAttribute('height', svg.getBoundingClientRect().height);
+    clone.style.transform='';
+    const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(clone));
+    await new Promise(res=>{ const im=new Image(); im.onload=()=>{ ctx.globalAlpha=effOpacity(svg, cont); ctx.drawImage(im, r.x, r.y, r.w, r.h); ctx.globalAlpha=1; res(); }; im.onerror=res; im.src=url; });
+  }
+  // 3. labels (name tags, sales cards, distances)
+  const labels = [...cont.querySelectorAll('.leaflet-tooltip, .salecard')];
+  for(const n of labels){
+    const r=toFrame(n.getBoundingClientRect()); if(!hit(r) || r.w<2) continue;
+    const cs=getComputedStyle(n); const card=n.classList.contains('salecard');
+    ctx.save(); ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=6*k;
+    ctx.fillStyle = card ? '#ffffff' : (cs.backgroundColor||'rgba(7,20,34,.85)');
+    rrect(ctx, r.x, r.y, r.w, r.h, 6*k); ctx.fill(); ctx.restore();
+    if(card){ ctx.fillStyle=cs.borderLeftColor||'#009FDF'; ctx.fillRect(r.x, r.y, 5*k, r.h); }
+    const lines = n.innerText.split('\n').map(t=>t.trim()).filter(Boolean);
+    const fs = parseFloat(cs.fontSize)||12, lh = card? fs*1.35 : r.h/k;
+    ctx.textBaseline='middle';
+    lines.forEach((t,i)=>{
+      const bold = !card || i===0;
+      ctx.font = `${bold?600:400} ${(card&&i===0?fs+1:fs)*k}px Inter, Segoe UI, Arial, sans-serif`;
+      ctx.fillStyle = card ? (i===0?'#00213F':'#1b2a38') : (cs.color||'#fff');
+      if(card) ctx.fillText(t, r.x+(10*k), r.y+(6+lh*(i+0.5))*k);
+      else { ctx.textAlign='center'; ctx.fillText(t, r.x+r.w/2, r.y+r.h/2); ctx.textAlign='left'; }
+    });
+  }
+  // 4. small credit line
+  const credit = 'Imagery: Esri, State of Queensland, NSW Spatial Services';
+  ctx.font=`${10*k}px Inter, Arial, sans-serif`; const tw=ctx.measureText(credit).width;
+  ctx.fillStyle='rgba(255,255,255,.75)'; ctx.fillRect(outW-tw-12*k, outH-16*k, tw+12*k, 16*k);
+  ctx.fillStyle='#333'; ctx.textBaseline='middle'; ctx.fillText(credit, outW-tw-6*k, outH-8*k);
+  return cv;
+}
+async function snapBlob(){
+  const cv = await renderSnapshot();
+  return await new Promise((res,rej)=>{ try{ cv.toBlob(b=> b? res(b) : rej(new Error('empty')), 'image/png'); }catch(e){ rej(e); } });
+}
+function snapFail(e){ console.warn(e); toast('The map image could not be captured from one of the map services. Use Windows Snipping Tool (Win + Shift + S) around the frame instead.', true); }
+$('#snapsave').onclick=async e=>{ e.target.disabled=true; try{ const b=await snapBlob(); const a=el('a',{href:URL.createObjectURL(b),download:`map-${stamp()}.png`}); document.body.append(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},800); toast('Image saved (4:3)'); }catch(err){ snapFail(err); } e.target.disabled=false; };
+$('#snapcopy').onclick=async e=>{ e.target.disabled=true; try{ const b=await snapBlob(); await navigator.clipboard.write([new ClipboardItem({'image/png':b})]); toast('Copied. Paste it into Word, Outlook or PowerPoint'); }catch(err){ if(err && err.name==='SecurityError') snapFail(err); else toast('Copy is not allowed in this browser. Use Save image instead.', true); } e.target.disabled=false; };
 
 /* ---------- bulk search ---------- */
 const CAT_WORDS = {subject:'subject',subjects:'subject',quote:'quote',quotes:'quote',sale:'sale',sales:'sale',sold:'sale','for sale':'forsale',forsale:'forsale','for sales':'forsale',other:'other'};

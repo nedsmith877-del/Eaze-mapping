@@ -14,6 +14,7 @@ A browser app for mapping properties in Queensland and New South Wales from thei
 - Build a sales map: add sale price and date to properties, pick a subject, and get numbered labels with price, $/ha and distance, plus a table. Print it or save it as PDF.
 - Switch base maps (QLD Globe and NSW imagery, plus free Google-style hybrid, street and terrain views). Click the map for Google Street View, Google Maps and Google Earth links.
 - Export properties for Google Earth (KML), GIS (GeoJSON), as an area table (CSV), or as a JSON backup. Properties save in your browser automatically.
+- 4:3 map snapshot: frame the map, then save a PNG (1024, 1600 or 2400 wide) or copy it to paste into Word/Outlook.
 
 ## Running it
 Open `index.html` in a browser, or publish it with GitHub Pages (Settings → Pages → Deploy from branch `main`, root folder). No build step is needed.
