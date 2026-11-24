@@ -4,84 +4,131 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Easy Mapping</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
 <style>
 :root{
-  --blue:#009FDF; --navy:#00213F; --sub:#B4D7EB;
-  --grey1:#767171; --grey2:#999999; --green:#70AD47; --orange:#ED7D31; --yellow:#FFC000;
-  --quote:#A23F97; --sale:#FF0000;
-  --bg:#f4f7fa; --panel:#ffffff; --text:#1b2a38; --muted:#5d6b78; --line:#dbe3ea;
+  --blue:#009FDF; --blue2:#33c0ff; --navy:#00213F; --sub:#B4D7EB;
+  --grey1:#767171; --grey2:#999999; --green:#70AD47; --orange:#ED7D31; --yellow:#FFC000; --quote:#A23F97; --sale:#FF0000;
+  --bg:#06111c; --panel:rgba(7,20,34,.84); --card:rgba(255,255,255,.045); --card2:rgba(255,255,255,.08);
+  --text:#e9f2f9; --muted:#8ea4b7; --line:rgba(255,255,255,.09); --danger:#ff5c6c;
+  --glow:0 0 0 1px rgba(0,159,223,.55),0 0 18px rgba(0,159,223,.35);
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:var(--text);background:var(--bg)}
-#app{display:flex;height:100vh;width:100vw;overflow:hidden}
-#side{width:380px;min-width:300px;max-width:100%;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--line);z-index:1000}
-header{background:var(--navy);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}
-header .logo{width:30px;height:30px;border-radius:50%;background:var(--blue);display:grid;place-items:center;font-weight:700;font-size:13px}
-header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.3px}
-header small{display:block;color:var(--sub);font-size:11px;font-weight:400}
-#tabs{display:flex;background:var(--sub)}
-#tabs button{flex:1;border:0;background:transparent;padding:10px 4px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;border-bottom:3px solid transparent}
-#tabs button.on{border-bottom-color:var(--blue);background:#d6eaf5}
-.pane{display:none;overflow:auto;flex:1;padding:14px 16px}
-.pane.on{display:block}
-h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--sub)}
-h2:first-child{margin-top:0}
-label{font-size:12px;color:var(--muted);display:block;margin:8px 0 3px}
-input[type=text],textarea,select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:14px;background:#fff;color:var(--text)}
-textarea{resize:vertical;min-height:64px}
-input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-offset:-1px}
+html,body{margin:0;height:100%;font-family:Inter,"Segoe UI",system-ui,Arial,sans-serif;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+#app{position:relative;height:100vh;width:100vw;overflow:hidden}
+#map{position:absolute;inset:0;background:#0a1826}
+#side{position:absolute;z-index:1100;left:14px;top:14px;bottom:14px;width:404px;max-width:calc(100% - 28px);display:flex;flex-direction:column;
+  background:var(--panel);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
+  border:1px solid var(--line);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden;transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+#side.hidden{transform:translateX(calc(-100% - 20px))}
+#sidetoggle{position:absolute;z-index:1101;top:22px;left:430px;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);backdrop-filter:blur(14px);cursor:pointer;font-size:15px;transition:left .35s cubic-bezier(.2,.8,.2,1)}
+#sidetoggle.out{left:14px}
+header{padding:18px 20px 12px;display:flex;align-items:center;gap:12px}
+header .logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--blue2),var(--blue) 55%,#006fa0);display:grid;place-items:center;font-weight:700;font-size:16px;color:#fff;box-shadow:0 6px 20px rgba(0,159,223,.45)}
+header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.2px}
+header small{display:block;color:var(--muted);font-size:11.5px;font-weight:500;letter-spacing:.2px;margin-top:1px}
+#tabs{display:flex;gap:4px;margin:0 16px 4px;padding:4px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px}
+#tabs button{flex:1;border:0;background:transparent;padding:8px 4px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:9px;transition:all .2s}
+#tabs button:hover{color:var(--text)}
+#tabs button.on{background:var(--blue);color:#fff;box-shadow:0 4px 14px rgba(0,159,223,.45)}
+.pane{display:none;overflow:auto;flex:1;padding:14px 16px 22px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+.pane.on{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+h2{font-size:10.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted);font-weight:700;margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+h2:before{content:"";width:14px;height:2px;border-radius:2px;background:var(--blue);box-shadow:0 0 8px var(--blue)}
+h2:first-child{margin-top:4px}
+label{font-size:11.5px;color:var(--muted);display:block;margin:10px 0 4px;font-weight:500}
+input[type=text],input[type=date],textarea,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:11px;font:inherit;font-size:13.5px;background:rgba(255,255,255,.055);color:var(--text);transition:border-color .2s,box-shadow .2s,background .2s;color-scheme:dark}
+input::placeholder,textarea::placeholder{color:#6c8295}
+select option{background:#0c1b2c;color:var(--text)}
+textarea{resize:vertical;min-height:64px;line-height:1.45}
+input:focus,textarea:focus,select:focus{outline:none;border-color:rgba(0,159,223,.7);box-shadow:var(--glow);background:rgba(255,255,255,.07)}
 .row{display:flex;gap:8px}
 .row>*{flex:1}
-.btn{border:0;border-radius:6px;padding:9px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--blue);color:#fff}
-.btn:hover{filter:brightness(.93)}
-.btn.sec{background:#fff;color:var(--navy);border:1px solid var(--line)}
-.btn.small{padding:5px 8px;font-size:12px}
-.btn:disabled{opacity:.5;cursor:default}
-.hint{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4}
-.swatches{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-.sw{width:26px;height:26px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
-.sw.on{box-shadow:0 0 0 2px var(--navy)}
-.cats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
-.cat{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:6px;padding:7px 8px;cursor:pointer;font-size:13px;background:#fff}
-.cat.on{border-color:var(--navy);box-shadow:inset 0 0 0 1px var(--navy)}
-.dot{width:14px;height:14px;border-radius:3px;flex:none}
-.prop{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#fff;overflow:hidden}
-.prop .top{display:flex;align-items:center;gap:9px;padding:9px 10px;cursor:pointer}
-.prop .top .dot{width:18px;height:18px}
+.btn{border:0;border-radius:11px;padding:10px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:linear-gradient(135deg,var(--blue2),var(--blue));color:#fff;box-shadow:0 6px 18px rgba(0,159,223,.3);transition:transform .15s,box-shadow .2s,filter .2s}
+.btn:hover{filter:brightness(1.08);box-shadow:0 8px 24px rgba(0,159,223,.45)}
+.btn:active{transform:translateY(1px)}
+.btn.sec{background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--line);box-shadow:none}
+.btn.sec:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.18)}
+.btn.small{padding:6px 10px;font-size:12px;border-radius:9px}
+.btn.wide{width:100%;padding:12px 14px;font-size:14px}
+.btn:disabled{opacity:.55;cursor:default}
+.hint{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.5}
+.hint b{color:var(--text);font-weight:600}
+.swatches{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.sw{width:24px;height:24px;border-radius:7px;border:2px solid transparent;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0;transition:transform .15s}
+.sw:hover{transform:scale(1.12)}
+.sw.on{box-shadow:0 0 0 2px #fff,0 0 12px rgba(255,255,255,.35)}
+.cats{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.cat{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:6px 12px 6px 9px;cursor:pointer;font-size:12.5px;font-weight:500;background:rgba(255,255,255,.04);transition:all .2s}
+.cat:hover{background:rgba(255,255,255,.08)}
+.cat.on{border-color:rgba(0,159,223,.8);background:rgba(0,159,223,.16);box-shadow:var(--glow)}
+.cat .dot{width:10px;height:10px;border-radius:50%}
+.dot{width:14px;height:14px;border-radius:4px;flex:none}
+.entry{background:linear-gradient(180deg,rgba(0,159,223,.10),rgba(255,255,255,.03));border:1px solid rgba(0,159,223,.25);border-radius:16px;padding:14px 14px 16px}
+.entry textarea{min-height:92px;font-size:14px}
+.examples{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.examples span{font-size:11px;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-family:ui-monospace,Consolas,monospace}
+.inline{display:flex;gap:8px;align-items:center}
+.inline select{width:auto;flex:none}
+.prop{border:1px solid var(--line);border-radius:14px;margin-bottom:8px;background:var(--card);overflow:hidden;transition:border-color .2s,background .2s}
+.prop:hover{border-color:rgba(255,255,255,.16);background:var(--card2)}
+.prop.open{border-color:rgba(0,159,223,.45)}
+.prop .top{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer}
+.prop .top .dot{width:12px;height:30px;border-radius:4px}
 .prop .nm{font-weight:600;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.prop .meta{font-size:12px;color:var(--muted)}
-.prop .area{font-weight:600;font-size:13px;color:var(--navy);text-align:right;white-space:nowrap}
-.prop .body{display:none;border-top:1px solid var(--line);padding:10px;background:#fafcfd}
+.prop .meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+.prop .area{font-weight:700;font-size:14px;color:#fff;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.prop .area .meta{font-weight:500}
+.prop .body{display:none;border-top:1px solid var(--line);padding:12px;background:rgba(0,0,0,.18)}
 .prop.open .body{display:block}
-.tbl{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}
-.tbl th{background:var(--navy);color:#fff;text-align:left;padding:5px 6px;font-weight:600}
-.tbl td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-.tbl tr.subh td{background:var(--sub);color:var(--navy);font-weight:600}
-.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.lyr{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eef2f5;font-size:13px}
-.lyr input[type=checkbox]{width:16px;height:16px;accent-color:var(--blue)}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;margin:8px 0;font-variant-numeric:tabular-nums}
+.tbl th{background:rgba(0,159,223,.16);color:#cdefff;text-align:left;padding:6px 7px;font-weight:600;font-size:11px;letter-spacing:.3px}
+.tbl th:first-child{border-radius:8px 0 0 8px}.tbl th:last-child{border-radius:0 8px 8px 0}
+.tbl td{padding:6px 7px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl tr.subh td{background:rgba(180,215,235,.07);color:var(--sub);font-weight:600}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.lyr{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:13px}
+.lyr input[type=checkbox],.lyr input[type=radio]{width:16px;height:16px;accent-color:var(--blue);flex:none}
 .lyr span{flex:1}
-.lyr input[type=range]{width:80px;accent-color:var(--blue)}
+.lyr input[type=range]{width:78px;accent-color:var(--blue)}
 .lyr a{font-size:11px;color:var(--blue);text-decoration:none}
+details summary{outline:none}
 .legend-img{max-width:100%;display:block}
-#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:5000;display:none;max-width:90vw;box-shadow:0 4px 16px rgba(0,0,0,.25)}
-#toast.err{background:#b00020}
-#map{flex:1;height:100%}
-.leaflet-tooltip.plabel{background:rgba(0,33,63,.85);color:#fff;border:0;font-weight:600;font-size:12px;box-shadow:none}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(7,20,34,.92);backdrop-filter:blur(12px);border:1px solid var(--line);color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;z-index:5000;display:none;max-width:90vw;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#toast.err{border-color:rgba(255,92,108,.6);box-shadow:0 0 0 1px rgba(255,92,108,.4),0 10px 30px rgba(0,0,0,.4)}
+.leaflet-container{font-family:Inter,"Segoe UI",system-ui,sans-serif}
+.leaflet-bar{border:1px solid var(--line)!important;border-radius:12px!important;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.35)!important}
+.leaflet-bar a{background:var(--panel)!important;color:var(--text)!important;border-bottom:1px solid var(--line)!important;backdrop-filter:blur(12px);width:34px!important;height:34px!important;line-height:34px!important}
+.leaflet-bar a:hover{background:rgba(0,159,223,.35)!important}
+.leaflet-control-attribution{background:rgba(7,20,34,.6)!important;color:#9fb3c4!important;border-radius:8px 0 0 0}
+.leaflet-control-attribution a{color:#cfe6f5!important}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:rgba(9,22,38,.96);color:var(--text);box-shadow:0 12px 32px rgba(0,0,0,.45);border:1px solid var(--line)}
+.leaflet-popup-content-wrapper{border-radius:14px}
+.leaflet-popup-content{font-size:12.5px;max-height:300px;overflow:auto;margin:12px 14px;line-height:1.5}
+.leaflet-popup-content b{color:#fff}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted)}
+.leaflet-tooltip.plabel{background:rgba(7,20,34,.82);color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:8px;font-weight:600;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.35);padding:3px 8px}
 .leaflet-tooltip.plabel:before{display:none}
-.leaflet-popup-content{font-size:12.5px;max-height:300px;overflow:auto;margin:10px 12px}
-.leaflet-popup-content b{color:var(--navy)}
-.empty{color:var(--muted);font-size:13px;text-align:center;padding:24px 8px;border:1px dashed var(--line);border-radius:8px}
-.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--sub);border-top-color:var(--blue);border-radius:50%;animation:s 0.8s linear infinite;vertical-align:-2px}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:26px 10px;border:1px dashed rgba(255,255,255,.14);border-radius:14px;background:rgba(255,255,255,.02)}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite;vertical-align:-2px}
 @keyframes s{to{transform:rotate(360deg)}}
-#mobtoggle{display:none}
+.stat{display:flex;gap:8px;margin-top:10px}
+.stat div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.stat b{display:block;font-size:15px;color:#fff;font-variant-numeric:tabular-nums}
+.stat span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.chip{display:inline-flex;align-items:center;gap:3px;margin:0 6px 5px 0;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 9px;font-size:11.5px;color:var(--text)}
+.chip button{border:0;background:none;cursor:pointer;color:var(--danger);padding:0 4px;font-size:11px}
 @media (max-width:760px){
-  #app{flex-direction:column}
-  #side{width:100%;height:52vh;border-right:0;border-bottom:1px solid var(--line)}
-  #map{height:48vh}
+  #side{left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58vh;border-radius:18px}
+  #side.hidden{transform:translateY(calc(100% + 16px))}
+  #side{background:rgba(7,20,34,.96)}
+  #sidetoggle{top:12px;left:12px!important}
+  header{padding:12px 16px 8px}
 }
 #printsheet{display:none}
 .salelbl{background:transparent;border:0}
@@ -90,8 +137,8 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
 .salecard .num{display:inline-block;min-width:20px;height:20px;border-radius:10px;color:#fff;font-weight:700;text-align:center;line-height:20px;margin-right:5px;font-size:11px;padding:0 4px}
 .distlbl{background:rgba(255,255,255,.9);border:0;color:var(--navy);font-weight:600;font-size:11px;box-shadow:none;padding:1px 5px}
 .distlbl:before{display:none}
-.linkrow{margin-top:8px;padding-top:6px;border-top:1px solid #e4e9ee;display:flex;flex-wrap:wrap;gap:8px}
-.linkrow a{color:var(--blue);font-weight:600;text-decoration:none;font-size:12px}
+.linkrow{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px}
+.linkrow a{color:var(--blue2);font-weight:600;text-decoration:none;font-size:12px}
 .salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .lyr.dis{opacity:.45}
 @media print{
@@ -123,45 +170,30 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
       <button data-tab="props" class="on">Properties</button>
       <button data-tab="layers">Map layers</button>
       <button data-tab="sales">Sales map</button>
-      <button data-tab="data">Save / export</button>
+      <button data-tab="data">Export</button>
     </nav>
 
     <!-- PROPERTIES -->
     <section class="pane on" id="pane-props">
-      <h2>Add a property</h2>
-      <label for="pname">Property name</label>
-      <input type="text" id="pname" placeholder="e.g. Example Aggregation">
-      <label for="plots">Lot / plan numbers (one per line or comma separated)</label>
-      <textarea id="plots" placeholder="QLD: 3RP123456 or Lot 3 on SP123456&#10;NSW: 1/DP123456 or 1/2/DP7890"></textarea>
-      <div class="row">
-        <div><label for="pstate">State</label>
-          <select id="pstate"><option value="auto">Auto detect</option><option value="QLD">QLD</option><option value="NSW">NSW</option></select></div>
-      </div>
-      <label>Category</label>
-      <div class="cats" id="catpick"></div>
-      <label>Colour</label>
-      <div class="swatches" id="colpick"></div>
-      <div class="acts"><button class="btn" id="addbtn">Find &amp; map property</button></div>
-      <div class="hint">Lots are looked up live on the QLD DCDB and NSW Spatial Services cadastre. Several lots added together are grouped as one property and their areas totalled. You can also enter a lot range (<b>1-5 RP123456</b>) or a whole plan (<b>SP123456</b>).</div>
-
-      <h2>Bulk search</h2>
-      <label for="bulk">Paste rows from Excel or a list. One title per row: <b>property name</b>, <b>lot/plan</b>, and optionally <b>category</b>.</label>
-      <textarea id="bulk" style="min-height:110px;font-family:Consolas,monospace;font-size:12.5px" placeholder="Example Aggregation&#9;3RP123456&#9;Subject&#10;Example Aggregation&#9;4RP123456&#10;Example Downs&#9;1/DP754321&#9;Sale&#10;2SP998877"></textarea>
-      <div class="row">
-        <div><label for="bulkmode">Group by</label>
-          <select id="bulkmode"><option value="name">Property name (same name = one property)</option><option value="each">Each title is its own property</option><option value="one">All titles into one property</option></select></div>
-      </div>
-      <div class="acts">
-        <button class="btn" id="bulkbtn">Bulk search &amp; map</button>
-        <button class="btn sec" id="bulkfilebtn">Load .csv / .txt</button>
+      <div class="entry">
+        <h2 style="margin-top:0">Find titles</h2>
+        <textarea id="plots" placeholder="Type or paste lot/plan numbers&#10;One title, a list, or rows copied from Excel"></textarea>
+        <div class="examples"><span>3RP123456</span><span>Lot 3 on SP123456</span><span>1/DP754321</span><span>1-5 RP123456</span><span>SP123456</span><span>Name ⇥ Lot ⇥ Type</span></div>
+        <div class="inline" style="margin-top:12px">
+          <input type="text" id="pname" placeholder="Property name (optional)">
+          <select id="pstate" title="State"><option value="auto">Auto</option><option value="QLD">QLD</option><option value="NSW">NSW</option></select>
+        </div>
+        <div class="cats" id="catpick" style="margin-top:12px"></div>
+        <div class="swatches" id="colpick" style="margin-top:10px"></div>
+        <div class="acts" style="margin-top:14px"><button class="btn wide" id="addbtn">Map titles</button></div>
+        <div class="hint" style="text-align:center">All titles go into one property, unless you paste rows with names: then each name becomes its own property. <a href="#" id="bulkfilebtn" style="color:var(--blue2)">Load a CSV file</a></div>
         <input type="file" id="bulkfile" accept=".csv,.txt,text/csv,text/plain" hidden>
+        <div id="bulkres"></div>
       </div>
-      <div class="hint">Rows without a category use the category and colour picked above. Rows with no name are named by their lot/plan, and a name you've already used adds lots to that property. Columns can be separated by tabs (copied from Excel), commas or semicolons, and a header row is skipped.</div>
-      <div id="bulkres"></div>
 
       <h2>Your properties <span id="pcount" style="color:var(--muted);font-weight:400"></span></h2>
       <div id="plist"></div>
-      <div id="totals" class="hint"></div>
+      <div id="totals"></div>
     </section>
 
     <!-- LAYERS -->
@@ -240,6 +272,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
       <p class="hint">QLD: Department of Resources DCDB cadastre; Vegetation management (regulated vegetation, essential habitat, wetlands, watercourses, PMAV); Regional ecosystem mapping; Land types of Queensland; Queensland land use (QLUMP); Floodplain assessment overlay; historic flood lines. NSW: Spatial Services NSW cadastre; State Vegetation Type Map (extant plant community types); Land and Soil Capability v4 (DCCEEW); NSW Landuse 2017; EPI flood planning areas (NSW Planning). Information is indicative only; check official sources (QLD Globe, SIX Maps, vegetation management reports) before relying on it.</p>
     </section>
   </aside>
+  <button id="sidetoggle" title="Hide / show panel">⟨</button>
   <div id="map"></div>
 </div>
 <div id="printsheet"></div>
@@ -445,7 +478,7 @@ let selCat = 'subject', selCol = CATEGORIES[0].hex;
 const save = ()=> store(KEY, props);
 
 /* ---------- map ---------- */
-const map = L.map('map', {zoomControl:true, preferCanvas:false}).setView([-25.5, 147.5], 5);
+const map = L.map('map', {zoomControl:false, preferCanvas:false}).setView([-25.5, 147.5], 5);
 const ESRI_IMG = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const tl = (u,o)=> L.tileLayer(u, Object.assign({maxZoom:21, maxNativeZoom:19}, o||{}));
 const ESRI = n=> `https://server.arcgisonline.com/ArcGIS/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
@@ -479,6 +512,8 @@ async function setBase(name){
   if(d && d.labels) LABELS.addTo(map); else map.removeLayer(LABELS);
 }
 setBase(baseName).catch(()=> setBase(BASE_DEFS[0].name));
+L.control.zoom({position:'topright'}).addTo(map);
+$('#sidetoggle').onclick=()=>{ const h=$('#side').classList.toggle('hidden'); $('#sidetoggle').classList.toggle('out',h); $('#sidetoggle').textContent = h?'⟩':'⟨'; };
 map.createPane('props'); map.getPane('props').style.zIndex = 450;
 
 const ovState = load(KEY+'-ovl', {});
@@ -521,13 +556,13 @@ function openProp(id, scroll){ openId = id; renderList(); if(scroll){ const n=do
 function renderList(){
   const list=$('#plist');
   $('#pcount').textContent = props.length?`(${props.length})`:'';
-  if(!props.length){ list.replaceChildren(el('div',{className:'empty'},'No properties yet. Enter lot/plan numbers above to map your first property.')); $('#totals').textContent=''; return; }
+  if(!props.length){ list.replaceChildren(el('div',{className:'empty'},'No properties yet. Enter lot/plan numbers above to map your first property.')); $('#totals').replaceChildren(); return; }
   list.replaceChildren(...props.map(p=>{
     const cat=catById(p.cat);
     const swatches = el('div',{className:'swatches'}, PALETTE.map(c=> el('button',{type:'button',className:'sw'+(c.hex===p.color?' on':''),title:c.name+' '+c.hex,style:`background:${c.hex}`,onclick:()=>{ p.color=c.hex; save(); drawProp(p); renderList(); }})));
     const catSel = el('select',{onchange:e=>{ p.cat=e.target.value; const c=catById(p.cat); if(c) p.color=c.hex; save(); drawProp(p); renderList(); }}, CATEGORIES.map(c=> el('option',{value:c.id, selected:c.id===p.cat}, c.name)));
     const fillR = el('input',{type:'range',min:0,max:0.8,step:0.05,value:p.fill??0.25, oninput:e=>{ p.fill=+e.target.value; drawProp(p); }, onchange:()=>save()});
-    const lotRows = p.lots.map(l=> el('tr',null, el('td',null,l.state), el('td',null,l.id), el('td',{style:'text-align:right'}, (l.titleArea && Math.abs(l.calcArea-l.titleArea)/l.titleArea>0.1) ? el('span',{title:'Measured area differs from the title area by more than 10%. Some lot pieces may be missing; remove and re-add this lot.',style:'color:#b00020;cursor:help'},'⚠ '+fmt(l.calcArea/10000)) : fmt(l.calcArea/10000)), el('td',{style:'text-align:right'}, l.titleArea?fmt(l.titleArea/10000):'–'),
+    const lotRows = p.lots.map(l=> el('tr',null, el('td',null,l.state), el('td',null,l.id), el('td',{style:'text-align:right'}, (l.titleArea && Math.abs(l.calcArea-l.titleArea)/l.titleArea>0.1) ? el('span',{title:'Measured area differs from the title area by more than 10%. Some lot pieces may be missing; remove and re-add this lot.',style:'color:var(--danger);cursor:help'},'⚠ '+fmt(l.calcArea/10000)) : fmt(l.calcArea/10000)), el('td',{style:'text-align:right'}, l.titleArea?fmt(l.titleArea/10000):'–'),
       el('td',null, el('button',{className:'btn sec small',title:'Remove this lot',onclick:()=>{ if(!confirmSafe(`Remove lot ${l.id} from ${p.name}?`)) return; p.lots=p.lots.filter(x=>x!==l); recalc(p); save(); drawProp(p); renderList(); }},'✕'))));
     const attrsRows = [];
     p.lots.forEach(l=>{ const a=Object.entries(l.attrs||{}).filter(([k,v])=>v!=null && v!==''); if(a.length){ attrsRows.push(el('tr',{className:'subh'}, el('td',{colSpan:2}, l.id))); a.forEach(([k,v])=>attrsRows.push(el('tr',null, el('td',null,k), el('td',null,String(v))))); } });
@@ -547,7 +582,7 @@ function renderList(){
         el('button',{className:'btn small',onclick:e=>runReport(p, e.target.closest('.body').querySelector('.report'))},'Land, vegetation & flood report'),
         el('button',{className:'btn sec small',onclick:()=>{ if(!confirmSafe(`Delete ${p.name}?`)) return; props=props.filter(x=>x!==p); if(propLayers[p.id]) propGroup.removeLayer(propLayers[p.id]); delete propLayers[p.id]; save(); renderList(); }},'Delete')),
       el('div',{className:'report'}, p.report? renderReport(p.report):null),
-      attrsRows.length? el('details',{style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--navy)'},'Parcel details'), el('table',{className:'tbl'}, el('tbody',null, attrsRows))) : null
+      attrsRows.length? el('details',{style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--sub)'},'Parcel details'), el('table',{className:'tbl'}, el('tbody',null, attrsRows))) : null
     );
     return el('div',{className:'prop'+(openId===p.id?' open':''),'data-pid':p.id},
       el('div',{className:'top',onclick:()=>{ openId = openId===p.id?null:p.id; renderList(); if(openId) zoomTo(p); }},
@@ -558,7 +593,12 @@ function renderList(){
   }));
   const tot = props.reduce((s,p)=>s+p.area,0);
   const byCat = CATEGORIES.map(c=>{ const ps=props.filter(p=>p.cat===c.id); return ps.length? `${c.name}: ${ps.length} (${fmt(ps.reduce((s,p)=>s+p.area,0)/10000,0)} ha)`:null; }).filter(Boolean);
-  $('#totals').textContent = `All properties: ${fmt(tot/10000)} ha. ` + byCat.join(' · ');
+  const lots = props.reduce((s,p)=>s+p.lots.length,0);
+  $('#totals').replaceChildren(el('div',{className:'stat'},
+    el('div',null, el('b',null, String(props.length)), el('span',null,'Properties')),
+    el('div',null, el('b',null, String(lots)), el('span',null,'Lots')),
+    el('div',null, el('b',null, fmt(tot/10000,0)), el('span',null,'Hectares'))),
+    byCat.length? el('div',{className:'hint',style:'margin-top:8px'}, byCat.join(' · ')) : '');
 }
 function confirmSafe(msg){ try{ return window.confirm(msg); }catch(e){ return true; } }
 function recalc(p){ p.area = p.lots.reduce((s,l)=>s+l.calcArea,0); const t=p.lots.every(l=>l.titleArea)? p.lots.reduce((s,l)=>s+l.titleArea,0):null; p.titleArea=t; p.report=null; }
@@ -610,7 +650,11 @@ async function addLotsTo(prop, raws, pref){
   if(errs.length) toast(errs.join(' | '), true); else if(notes.length) toast(notes.join(' | ')); else if(added) toast(`Added ${added} lot${added===1?'':'s'} to ${prop.name}`);
   return added;
 }
+function isBulkText(text){
+  return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).some(l=> l.includes('\t') || splitCells(l).filter(c=>c.trim()).some(c=>!looksLikeLot(c)));
+}
 $('#addbtn').addEventListener('click', async ()=>{
+  if(isBulkText($('#plots').value)){ const btn=$('#addbtn'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Searching…'); try{ await bulkRun(); } catch(e){ toast('Search failed: '+e.message, true); } finally{ btn.disabled=false; btn.textContent='Map titles'; } return; }
   const raws = $('#plots').value.split(/[\n,;]+/).filter(s=>s.trim());
   if(!raws.length){ toast('Enter at least one lot/plan number', true); return; }
   const btn=$('#addbtn'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Looking up…');
@@ -618,7 +662,7 @@ $('#addbtn').addEventListener('click', async ()=>{
   try{
     const n = await addLotsTo(p, raws, $('#pstate').value);
     if(n){ props.push(p); save(); drawProp(p); openId=p.id; renderList(); $('#plots').value=''; $('#pname').value=''; }
-  } finally { btn.disabled=false; btn.textContent='Find & map property'; }
+  } finally { btn.disabled=false; btn.textContent='Map titles'; }
 });
 
 /* ---------- sale details ---------- */
@@ -632,7 +676,7 @@ function saleEditor(p){
   const upd = ()=>{ per.textContent = p.sale.price ? `${money(p.sale.price)} = ${money(p.sale.price/ha)}/ha = ${money(p.sale.price/(p.area/4046.8564224))}/ac` : 'Add a price to see $/ha and $/ac.'; };
   upd();
   const lbl = {sale:'Sale price', forsale:'Asking price', quote:'Quote / estimate', subject:'Value / price'}[p.cat] || 'Price';
-  return el('details',{open:!!p.sale.price,style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--navy);font-weight:600'},'Sale details'),
+  return el('details',{open:!!p.sale.price,style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--sub);font-weight:600'},'Sale details'),
     el('div',{className:'salegrid'},
       el('div',null, el('label',null,lbl), el('input',{type:'text',inputMode:'decimal',value:p.sale.price?Math.round(p.sale.price).toLocaleString('en-AU'):'',placeholder:'e.g. 4,250,000 or 4.25m',onchange:e=>{ p.sale.price=parsePrice(e.target.value); e.target.value=p.sale.price?Math.round(p.sale.price).toLocaleString('en-AU'):''; save(); upd(); refreshSales(); }})),
       el('div',null, el('label',null,'Date'), el('input',{type:'date',value:p.sale.date||'',onchange:e=>{ p.sale.date=e.target.value; save(); refreshSales(); }}))),
@@ -744,14 +788,14 @@ function salesEntry(p){
       el('div',null, el('label',null,'Notes'), el('input',{type:'text',value:p.sale.notes||'',onchange:e=>{ p.sale.notes=e.target.value; changed(); }}))),
     el('label',null,'Colour'), sw,
     el('label',null,`Lots (${fmt(p.area/10000)} ha)`),
-    el('div',{className:'hint',style:'margin-top:0'}, p.lots.map(l=> el('span',{style:'display:inline-flex;align-items:center;gap:3px;margin:0 8px 4px 0;background:#eef4f8;border-radius:4px;padding:2px 6px'}, `${l.state} ${l.id}`,
-      el('button',{type:'button',title:'Remove lot',style:'border:0;background:none;cursor:pointer;color:#b00020;padding:0 2px',onclick:()=>{ p.lots=p.lots.filter(x=>x!==l); recalc(p); changed(); }},'✕')))),
+    el('div',{className:'hint',style:'margin-top:0'}, p.lots.map(l=> el('span',{className:'chip'}, `${l.state} ${l.id}`,
+      el('button',{type:'button',title:'Remove lot',onclick:()=>{ p.lots=p.lots.filter(x=>x!==l); recalc(p); changed(); }},'✕')))),
     el('div',{className:'row',style:'margin-top:4px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, v.split(/[\n,;]+/), 'auto'); e.target.disabled=false; refreshSales(); }},'Add lot')),
     el('div',{className:'acts'}, el('button',{className:'btn sec small',onclick:()=>zoomTo(p)},'Zoom to'),
       isSubj? null : el('button',{className:'btn sec small',onclick:()=>{ sState.subject=p.id; store(SKEY,sState); refreshSales(); }},'Make subject')));
   return el('div',{className:'prop'+(sOpen===p.id?' open':''),style:'margin-bottom:6px'},
     el('div',{className:'top',style:'padding:7px 9px'},
-      isSubj ? el('span',{style:'font-size:11px;font-weight:700;color:var(--navy);width:16px'},'S')
+      isSubj ? el('span',{style:'font-size:11px;font-weight:700;color:var(--blue2);width:16px'},'S')
              : el('input',{type:'checkbox',checked:inc,style:'width:16px;height:16px;accent-color:var(--blue)',onclick:e=>e.stopPropagation(),onchange:e=>{ sState.include[p.id]=e.target.checked; store(SKEY,sState); refreshSales(); }}),
       el('span',{className:'dot',style:`background:${p.color};width:14px;height:14px`}),
       el('div',{style:'flex:1;min-width:0',onclick:()=>{ sOpen = sOpen===p.id?null:p.id; renderSalesTab(); }},
@@ -825,19 +869,20 @@ function parseBulkRow(line){
   return {name, cat, lots};
 }
 async function bulkRun(){
-  const lines = $('#bulk').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const lines = $('#plots').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
   if(!lines.length){ toast('Paste at least one row', true); return; }
-  const mode=$('#bulkmode').value, pref=$('#pstate').value;
+  const mode='name', pref=$('#pstate').value, fallbackName=$('#pname').value.trim();
   const rows = lines.map(parseBulkRow).filter(r=>r && !r.header);
   if(!rows.length){ toast('No lot/plan numbers found in the pasted rows', true); return; }
   const groups = new Map();
   rows.forEach((r,i)=>{
-    const key = mode==='one' ? '__one' : mode==='each' ? 'row'+i : (r.name ? r.name.toLowerCase() : 'row'+i);
-    if(!groups.has(key)) groups.set(key, {name: mode==='one' ? ($('#pname').value.trim()||'Bulk search '+new Date().toLocaleDateString('en-AU')) : (r.name || r.lots.join(' & ')), cat:r.cat, raws:[]});
+    const nm = r.name || fallbackName;
+    const key = nm ? nm.toLowerCase() : 'row'+i;
+    if(!groups.has(key)) groups.set(key, {name: nm || r.lots.join(' & '), cat:r.cat, raws:[]});
     const g=groups.get(key); if(!g.cat && r.cat) g.cat=r.cat; g.raws.push(...r.lots);
   });
   const items=[]; groups.forEach(g=> g.raws.flatMap(expandRanges).forEach(r=>items.push({g, r})));
-  const btn=$('#bulkbtn'), res=$('#bulkres'); btn.disabled=true;
+  const res=$('#bulkres');
   const prog = el('div',{className:'hint'}, el('span',{className:'spin'}), ' Searching 0 of '+items.length+' titles…');
   res.replaceChildren(prog);
   const found = await pool(items, 6, it=>lookup(it.r, pref), (d,n)=>{ prog.lastChild.textContent=` Searching ${d} of ${n} titles…`; });
@@ -851,20 +896,19 @@ async function bulkRun(){
     lots.forEach(l=>{ if(!p.lots.some(x=>x.id===l.id && x.state===l.state)){ p.lots.push(l); nLots++; } });
     recalc(p); drawProp(p); touched.push(p);
   });
-  save(); renderList(); btn.disabled=false;
+  save(); renderList();
   if(touched.length){ try{ map.fitBounds(L.featureGroup(touched.map(p=>propLayers[p.id])).getBounds(), {padding:[30,30], maxZoom:16}); }catch(e){} }
-  const summary = el('div',{className:'hint',style:'font-size:13px;color:var(--navy);margin-top:6px'}, `Mapped ${nLots} lot${nLots===1?'':'s'} across ${touched.length} propert${touched.length===1?'y':'ies'}${nProps<touched.length?` (${touched.length-nProps} existing propert${touched.length-nProps===1?'y':'ies'} updated)`:''}.`);
+  const summary = el('div',{className:'hint',style:'font-size:13px;color:var(--text);margin-top:6px'}, `Mapped ${nLots} lot${nLots===1?'':'s'} across ${touched.length} propert${touched.length===1?'y':'ies'}${nProps<touched.length?` (${touched.length-nProps} existing propert${touched.length-nProps===1?'y':'ies'} updated)`:''}.`);
   const parts=[summary];
   if(errs.length){
     parts.push(el('table',{className:'tbl'}, el('thead',null, el('tr',null, el('th',null,`Not found (${errs.length})`), el('th',null,'Property'), el('th',null,'Reason'))), el('tbody',null, errs.map(e=> el('tr',null, el('td',null,e.raw), el('td',null,e.name), el('td',null,e.error)))) ));
-    parts.push(el('div',{className:'acts'}, el('button',{className:'btn sec small',onclick:()=>{ $('#bulk').value = errs.map(e=>`${e.name}\t${e.raw}`).join('\n'); toast('Not-found rows put back in the box to fix and retry'); }},'Put not-found rows back in the box')));
-  } else $('#bulk').value='';
+    parts.push(el('div',{className:'acts'}, el('button',{className:'btn sec small',onclick:()=>{ $('#plots').value = errs.map(e=>`${e.name}\t${e.raw}`).join('\n'); toast('Not-found rows put back in the box to fix and retry'); }},'Put not-found rows back in the box')));
+  } else $('#plots').value='';
   res.replaceChildren(...parts);
   toast(errs.length ? `Done: ${nLots} lots mapped, ${errs.length} not found` : `Done: ${nLots} lots mapped`, !!errs.length && !nLots);
 }
-$('#bulkbtn').addEventListener('click', ()=>bulkRun().catch(e=>{ $('#bulkbtn').disabled=false; toast('Bulk search failed: '+e.message, true); }));
-$('#bulkfilebtn').onclick=()=> $('#bulkfile').click();
-$('#bulkfile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('#bulk').value = await f.text(); e.target.value=''; toast('File loaded. Check the rows, then press Bulk search & map'); };
+$('#bulkfilebtn').onclick=e=>{ e.preventDefault(); $('#bulkfile').click(); };
+$('#bulkfile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('#plots').value = await f.text(); e.target.value=''; toast('File loaded. Check the rows, then press Map titles'); };
 
 /* ---------- reports (veg + land types inside the boundary) ---------- */
 async function identifyPolygon(url, layerIds, rings){
@@ -920,7 +964,7 @@ function renderReport(rep){
   const rows=[];
   rep.sections.forEach(s=>{
     rows.push(el('tr',{className:'subh'}, el('td',{colSpan:2}, `${s.st} · ${s.name}`)));
-    if(s.err && !s.items.length) rows.push(el('tr',null, el('td',{colSpan:2,style:'color:#b00020'}, 'Could not read this layer: '+s.err)));
+    if(s.err && !s.items.length) rows.push(el('tr',null, el('td',{colSpan:2,style:'color:var(--danger)'}, 'Could not read this layer: '+s.err)));
     else if(!s.items.length) rows.push(el('tr',null, el('td',{colSpan:2,style:'color:var(--muted)'}, 'None mapped inside the boundary')));
     else s.items.sort((a,b)=>a.layer.localeCompare(b.layer)).forEach(i=> rows.push(el('tr',null, el('td',null,i.layer), el('td',null,i.val || '(mapped)'))));
   });
@@ -935,7 +979,7 @@ function placeLinks(ll){
     el('a',{href:`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`,target:'_blank',rel:'noopener'},'Google Street View'),
     el('a',{href:`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,target:'_blank',rel:'noopener'},'Google Maps'),
     el('a',{href:`https://earth.google.com/web/@${lat},${lng},300a,2500d,35y,0h,45t,0r`,target:'_blank',rel:'noopener'},'Google Earth'),
-    el('span',{style:'font-size:11px;color:#777;width:100%'},`${lat}, ${lng}`));
+    el('span',{style:'font-size:11px;color:var(--muted);width:100%'},`${lat}, ${lng}`));
 }
 map.on('click', async e=>{
   const active = OVERLAYS.filter(o=>ovLayers[o.id] && map.hasLayer(ovLayers[o.id]) && !/cad$/.test(o.id));
@@ -946,8 +990,8 @@ map.on('click', async e=>{
     try{
       const j = await identifyPoint(o.url, o.reportLayers||o.layers, e.latlng);
       const res = (j.results||[]);
-      out.append(el('div',{style:'margin-bottom:6px'}, el('b',null,o.name), res.length? res.slice(0,8).map(r=> el('div',null, (r.layerName?r.layerName+': ':'') + summariseResult(r,o))) : el('div',{style:'color:#777'},'Nothing mapped here')));
-    }catch(err){ out.append(el('div',null, el('b',null,o.name), el('div',{style:'color:#b00020'}, err.message))); }
+      out.append(el('div',{style:'margin-bottom:6px'}, el('b',null,o.name), res.length? res.slice(0,8).map(r=> el('div',null, (r.layerName?r.layerName+': ':'') + summariseResult(r,o))) : el('div',{style:'color:var(--muted)'},'Nothing mapped here')));
+    }catch(err){ out.append(el('div',null, el('b',null,o.name), el('div',{style:'color:var(--danger)'}, err.message))); }
   }
   out.append(placeLinks(e.latlng));
   pop.setContent(out);
@@ -985,7 +1029,7 @@ async function renderLegend(){
       // include children of group layers by name match is unknown; show all legend entries whose layerId is listed or (if group) the next few ids
       let ls = legendCache[o.url].layers||[];
       if(want) ls = ls.filter(l=> want.includes(l.layerId) || want.some(w=> w>=100 ? (l.layerId>w && l.layerId<w+10) : (w===0&&o.url===QLD_RE ? l.layerId<5 : w===5&&o.url===QLD_RE? (l.layerId>5&&l.layerId<12) : w===6&&o.url===QLD_VM ? (l.layerId===7||l.layerId===8) : false)));
-      const block=el('div',{style:'margin-bottom:10px'}, el('div',{style:'font-weight:600;color:var(--navy);margin:6px 0 4px'}, o.name));
+      const block=el('div',{style:'margin-bottom:10px'}, el('div',{style:'font-weight:600;color:var(--text);margin:6px 0 4px'}, o.name));
       ls.slice(0,8).forEach(l=>{ if(ls.length>1) block.append(el('div',{style:'font-size:11px;color:var(--muted);margin-top:4px'}, l.layerName)); (l.legend||[]).slice(0,25).forEach(i=> block.append(el('div',{style:'display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text)'}, el('img',{src:`data:${i.contentType};base64,${i.imageData}`,width:18,height:18,alt:''}), i.label||l.layerName))); });
       parts.push(block);
     }catch(e){ parts.push(el('div',null, o.name+': legend unavailable')); }
