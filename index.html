@@ -192,6 +192,7 @@ details summary{outline:none}
       </div>
 
       <h2>Your properties <span id="pcount" style="color:var(--muted);font-weight:400"></span></h2>
+      <label class="lyr" style="margin:-4px 0 8px;color:var(--text);border:0"><input type="checkbox" id="shownames"><span>Show property names on the map</span></label>
       <div id="plist"></div>
       <div id="totals"></div>
     </section>
@@ -530,6 +531,7 @@ function makeOverlay(o){
 }
 
 let salesMode = false;
+let showNames = load(KEY+'-names', false);
 const propGroup = L.featureGroup().addTo(map);
 const propLayers = {};
 
@@ -538,7 +540,7 @@ function drawProp(p){
   const fc = {type:'FeatureCollection', features:p.lots.map(l=>({type:'Feature', geometry:l.geo, properties:{id:l.id}}))};
   const lyr = L.geoJSON(fc, {pane:'props', style:{color:p.color, weight:2.5, fillColor:p.color, fillOpacity:p.fill??0.25, smoothFactor:0.3},
     onEachFeature:(f,l)=>{ l.on('click', e=>{ L.DomEvent.stopPropagation(e); openProp(p.id, true); showPropPopup(p, e.latlng); }); }});
-  if(p.lots.length && !salesMode){ lyr.bindTooltip(p.name, {permanent:true, direction:'center', className:'plabel'}); }
+  if(p.lots.length && !salesMode && showNames){ lyr.bindTooltip(p.name, {permanent:true, direction:'center', className:'plabel'}); }
   propLayers[p.id]=lyr; propGroup.addLayer(lyr);
 }
 function showPropPopup(p, latlng){
@@ -1089,6 +1091,8 @@ $('#printbtn').onclick=()=>{ document.body.classList.remove('printing-sales'); w
 $('#clearall').onclick=()=>{ if(!props.length||!confirmSafe('Remove all properties from this browser? Export first if you want a copy.')) return; props=[]; propGroup.clearLayers(); for(const k in propLayers) delete propLayers[k]; save(); renderList(); };
 
 /* ---------- init ---------- */
+$('#shownames').checked = showNames;
+$('#shownames').onchange = e=>{ showNames=e.target.checked; store(KEY+'-names', showNames); props.forEach(drawProp); };
 renderPickers(); renderLayersTab(); renderLegend(); renderSalesTab();
 props.forEach(drawProp); renderList();
 if(props.length){ try{ map.fitBounds(propGroup.getBounds(),{padding:[30,30]}); }catch(e){} }
