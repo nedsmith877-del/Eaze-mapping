@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="app-version" content="202611241212">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Easy Mapping</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -156,6 +158,18 @@ body.snapping #snapbtn{display:none}
 .linkrow a{color:var(--blue2);font-weight:600;text-decoration:none;font-size:12px}
 .salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .lyr.dis{opacity:.45}
+.tchk{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:rgba(255,255,255,.03)}
+.tchk h4{margin:0 0 4px;font-size:12.5px;display:flex;align-items:center;gap:8px}
+.tchk h4 span{flex:1}
+.tchk .ti{display:flex;gap:8px;align-items:flex-start;font-size:12px;padding:4px 0;border-top:1px solid var(--line)}
+.tchk .ti:first-of-type{border-top:0}
+.tchk .ti .ic{flex:none;width:16px;text-align:center}
+.tchk .ti .tx{flex:1;min-width:0}
+.tchk .ti .tx small{display:block;color:var(--muted);font-size:11px}
+.tbadge{display:inline-block;font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px;margin-left:6px;vertical-align:1px}
+.tbadge.ok{background:rgba(112,173,71,.18);color:var(--green)}
+.tbadge.warn{background:rgba(255,192,0,.18);color:var(--yellow)}
+#newver{position:fixed;z-index:3000;left:50%;top:12px;transform:translateX(-50%);display:none;background:var(--blue);color:#fff;font-weight:600;font-size:13px;border-radius:999px;padding:9px 16px;box-shadow:0 8px 24px rgba(0,0,0,.4);cursor:pointer;max-width:calc(100% - 32px);text-align:center}
 .sw2{display:inline-block;width:16px;height:12px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.35)}
 .keyrow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);padding:2px 0;line-height:1.25}
 .keyrow img{width:16px;height:16px;flex:none}
@@ -380,6 +394,7 @@ body.snapping #ovsum{display:none!important}
   <div id="ovsum"><div class="oh"><span>📍 What's on your properties</span><button id="ovsumclose" title="Close">×</button></div><div class="ob" id="ovsumbody"></div></div>
   <div id="addr"><form id="addrform"><input id="addrq" type="search" placeholder="Search an address or place, e.g. 12 Smith Rd Roma" autocomplete="off"><button class="btn small" type="submit">Search</button></form><div id="addrres"></div></div>
   <div id="mapkey"><div class="kh" id="mapkeyh"><span>🗺️ Map key</span><b id="mapkeytog">–</b></div><div class="kb" id="mapkeyb"></div></div>
+  <div id="newver">A newer version of Easy Mapping is ready. Tap to update.</div>
   <div id="lblhint">Zoom in closer to see lot &amp; plan numbers</div>
   <div id="map"></div>
 </div>
@@ -762,6 +777,7 @@ function renderList(){
       el('table',{className:'tbl'}, el('thead',null, el('tr',null, el('th',null,'State'), el('th',null,'Lot/plan'), el('th',{style:'text-align:right'},'Calc. ha'), el('th',{style:'text-align:right'},'Title ha'), el('th',null,''))), el('tbody',null, lotRows,
         el('tr',{className:'subh'}, el('td',{colSpan:2},'Total'), el('td',{style:'text-align:right'},fmt(p.area/10000)), el('td',{style:'text-align:right'}, p.titleArea?fmt(p.titleArea/10000):'–'), el('td')))),
       el('div',{className:'hint'}, `${fmt(p.area/10000)} ha = ${fmt(p.area/4046.8564224)} acres = ${fmt(p.area/1e6,3)} km². Calc. area is measured from the boundary; title area is the surveyed area recorded on the cadastre.`),
+      titlePanel(p),
       el('div',{className:'row',style:'margin-top:8px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, splitTitles(v), 'auto'); e.target.disabled=false; }},'Add lot')),
       el('div',{className:'acts'},
         el('button',{className:'btn small',onclick:()=>zoomTo(p)},'Zoom to'),
@@ -774,7 +790,7 @@ function renderList(){
     return el('div',{className:'prop'+(openId===p.id?' open':''),'data-pid':p.id},
       el('div',{className:'top',onclick:()=>{ openId = openId===p.id?null:p.id; renderList(); if(openId) zoomTo(p); }},
         el('span',{className:'dot',style:`background:${p.color}`}),
-        el('div',{style:'flex:1;min-width:0'}, el('div',{className:'nm'},p.name), el('div',{className:'meta'}, `${cat?cat.name:''} · ${p.lots.length} lot${p.lots.length===1?'':'s'} · ${[...new Set(p.lots.map(l=>l.state))].join('/')}`)),
+        el('div',{style:'flex:1;min-width:0'}, el('div',{className:'nm'},p.name, titleBadge(p)), el('div',{className:'meta'}, `${cat?cat.name:''} · ${p.lots.length} lot${p.lots.length===1?'':'s'} · ${[...new Set(p.lots.map(l=>l.state))].join('/')}`)),
         el('div',{className:'area'}, `${fmt(p.area/10000)} ha`, el('div',{className:'meta',style:'font-weight:400'}, `${fmt(p.area/4046.8564224,0)} ac`))),
       body);
   }));
@@ -785,11 +801,111 @@ function renderList(){
     el('div',null, el('b',null, String(props.length)), el('span',null,'Properties')),
     el('div',null, el('b',null, String(lots)), el('span',null,'Lots')),
     el('div',null, el('b',null, fmt(tot/10000,0)), el('span',null,'Hectares'))),
-    byCat.length? el('div',{className:'hint',style:'margin-top:8px'}, byCat.join(' · ')) : '');
+    byCat.length? el('div',{className:'hint',style:'margin-top:8px'}, byCat.join(' · ')) : '',
+    el('div',{className:'acts',style:'margin-top:8px'}, el('button',{className:'btn sec small',onclick:async e=>{ const b=e.target; b.disabled=true; for(let i=0;i<props.length;i++){ b.textContent=`Checking ${i+1} of ${props.length}…`; await checkTitles(props[i]); } b.disabled=false; b.textContent='Double-check all titles'; const n=props.reduce((s,p)=>s+((p.check&&p.check.issues)||0),0); toast(n? `${n} thing${n===1?'':'s'} to review. Open the properties marked ⚠.` : 'All titles match the QLD Globe / NSW cadastre'); }},'Double-check all titles')));
 }
 function confirmSafe(msg){ try{ return window.confirm(msg); }catch(e){ return true; } }
 function recalc(p){ p.area = p.lots.reduce((s,l)=>s+l.calcArea,0); const t=p.lots.every(l=>l.titleArea)? p.lots.reduce((s,l)=>s+l.titleArea,0):null; p.titleArea=t; p.report=null; }
 function zoomTo(p){ if(!p.lots.length) return; map.fitBounds(geoBounds(p.lots.map(l=>l.geo)), {padding:[40,40], maxZoom:17}); }
+
+/* ---------- title double-check (against the live QLD Globe / NSW SIX cadastre) ---------- */
+function titleBadge(p){
+  const c=p.check; if(!c || !p.lots.length) return null;
+  return c.issues ? el('span',{className:'tbadge warn',title:'Open to see what to review'}, `⚠ ${c.issues} to review`) : el('span',{className:'tbadge ok',title:'Checked '+new Date(c.t).toLocaleString('en-AU')}, '✓ titles checked');
+}
+const nearM = (a,b)=>{ const dx=(a[0]-b[0])*Math.cos(a[1]*Math.PI/180)*111320, dy=(a[1]-b[1])*110540; return Math.hypot(dx,dy); };
+function geoVerts(g){ const out=[]; (g.type==='Polygon'?[g.coordinates]:g.coordinates).forEach(p=>p.forEach(r=>r.forEach(v=>out.push(v)))); return out; }
+function vertsTouch(A,B,tol){ // any vertex of one within tol metres of the other's vertices (good enough for surveyed boundaries)
+  const step=Math.max(1,Math.floor(A.length*B.length/400000));
+  for(let i=0;i<A.length;i+=step) for(let j=0;j<B.length;j++) if(nearM(A[i],B[j])<tol) return true;
+  return false;
+}
+async function samePlanNeighbours(p){
+  const out=[]; const have=new Set(p.lots.map(l=>l.state+'|'+l.id));
+  const b=geoBounds(p.lots.map(l=>l.geo)).pad(0.15);
+  const env={geometry:JSON.stringify({xmin:b.getWest()-0.01,ymin:b.getSouth()-0.01,xmax:b.getEast()+0.01,ymax:b.getNorth()+0.01,spatialReference:{wkid:4326}}), geometryType:'esriGeometryEnvelope', inSR:4326, spatialRel:'esriSpatialRelIntersects', returnGeometry:true, outSR:4326, geometryPrecision:6, maxAllowableOffset:0.00005};
+  const mine=p.lots.map(l=>geoVerts(l.geo)).flat();
+  const plans=[...new Set(p.lots.map(l=>l.state+'|'+l.plan))];
+  for(const sp of plans){
+    const [st,plan]=sp.split('|');
+    try{
+      let feats=[];
+      if(st==='QLD'){ const j=await getJSON(QLD_CAD+'/4/query', Object.assign({where:`plan='${plan.replace(/'/g,"''")}'`, outFields:'lotplan,lot,plan,lot_area,parcel_typ'}, env), true);
+        feats=(j.features||[]).filter(f=>!/easement|road/i.test(String((f.attributes||{}).parcel_typ||''))).map(f=>({id:f.attributes.lotplan, area:f.attributes.lot_area, geo:esriToGeo(f.geometry)})); }
+      else { const n=parseInt(plan.replace(/^[A-Z]+/,''),10); const pre=plan.replace(/\d+$/,''); const j=await nswQuery(Object.assign({where:`plannumber=${n}`, outFields:'lotidstring,planlabel,planlotarea,planlotareaunits'}, env));
+        feats=(j.features||[]).filter(f=>{ const l=String((f.attributes||{}).planlabel||'').toUpperCase(); return !l || l.includes(pre); }).map(f=>{ const a=f.attributes; const u=String(a.planlotareaunits||'').toLowerCase(); return {id:a.lotidstring, area:a.planlotarea? a.planlotarea*(u.startsWith('h')?10000:u.startsWith('a')&&u!=='ar'?4046.8564224:1):null, geo:esriToGeo(f.geometry)}; }); }
+      const seen=new Set();
+      feats.forEach(f=>{ if(!f.id || !f.geo || have.has(st+'|'+f.id) || seen.has(f.id)) return; seen.add(f.id);
+        const touch=vertsTouch(geoVerts(f.geo), mine, 40); const area=f.area||geoArea(f.geo);
+        if(area<5000 && !touch) return;
+        out.push({st, id:f.id, area, touch}); });
+    }catch(e){ console.warn('neighbour check failed', sp, e); out.push({st, plan, failed:true}); }
+  }
+  return out.sort((a,b)=>(b.touch?1:0)-(a.touch?1:0));
+}
+const checking=new Set();
+async function checkTitles(p, opt={}){
+  if(!p || !p.lots.length || checking.has(p.id)) return; checking.add(p.id);
+  const prev=p.check||{}; p.check=Object.assign({}, prev, {busy:true}); rerenderCheck(p);
+  const items=[];
+  try{
+    if(!opt.fresh){
+      for(const l of p.lots){
+        const q=parseLot(l.id); let live=null, err=null;
+        try{ live = q && !q.error ? (l.state==='QLD'? await queryQLD(q) : await queryNSW(q)) : null; }catch(e){ err=e.message; }
+        if(err){ items.push({k:'err', id:l.id, st:l.state, msg:`Couldn't reach the ${l.state==='QLD'?'QLD Globe':'NSW'} cadastre (${err}). Try again shortly.`}); continue; }
+        const m = live && (live.find(x=>x.id===l.id) || live[0]);
+        if(!m){ items.push({k:'missing', id:l.id, st:l.state, msg:'No longer on the cadastre. It may have been cancelled, subdivided or renumbered. Look it up on '+(l.state==='QLD'?'QLD Globe':'SIX Maps')+'.'}); continue; }
+        const d=Math.abs(m.calcArea-l.calcArea)/Math.max(m.calcArea,1);
+        if(d>0.005) items.push({k:'changed', id:l.id, st:l.state, msg:`Boundary has changed since you mapped it (${fmt(l.calcArea/10000)} ha then, ${fmt(m.calcArea/10000)} ha now).`, live:m});
+        else if(m.titleArea && Math.abs(m.calcArea-m.titleArea)/m.titleArea>0.1) items.push({k:'area', id:l.id, st:l.state, msg:`Measured ${fmt(m.calcArea/10000)} ha but the title says ${fmt(m.titleArea/10000)} ha. Part of the lot may be in another piece, or the title area includes roads or water.`});
+        else items.push({k:'ok', id:l.id, st:l.state, msg:`Matches the ${l.state==='QLD'?'QLD Globe':'NSW'} cadastre${m.titleArea?` (${fmt(m.titleArea/10000)} ha on title)`:''}.`});
+      }
+    } else p.lots.forEach(l=> items.push(l.titleArea && Math.abs(l.calcArea-l.titleArea)/l.titleArea>0.1
+      ? {k:'area', id:l.id, st:l.state, msg:`Measured ${fmt(l.calcArea/10000)} ha but the title says ${fmt(l.titleArea/10000)} ha. Part of the lot may be in another piece, or the title area includes roads or water.`}
+      : {k:'ok', id:l.id, st:l.state, msg:`Found on the ${l.state==='QLD'?'QLD Globe':'NSW'} cadastre${l.titleArea?` (${fmt(l.titleArea/10000)} ha on title)`:''}.`}));
+    (p.notFound||[]).forEach(x=> items.push({k:'notfound', id:x.raw, msg:x.why||'Not found on the cadastre. Check the lot and plan numbers.'}));
+    const nb=await samePlanNeighbours(p);
+    nb.forEach(n=> items.push(n.failed ? {k:'err', id:n.plan, st:n.st, msg:`Couldn't check for other lots on ${n.plan}. Try again shortly.`}
+      : {k:n.touch?'adj':'near', id:n.id, st:n.st, msg:`${n.touch?'Shares a boundary with':'Close to'} this property and is on the same plan${n.area?` (${fmt(n.area/10000)} ha)`:''}. Is it part of the holding?`}));
+  }catch(e){ items.push({k:'err', id:'', msg:'Title check failed: '+e.message}); }
+  const issues=items.filter(i=>!['ok','near'].includes(i.k)).length;
+  p.check={t:Date.now(), items, issues, full:!opt.fresh};
+  checking.delete(p.id); save(); rerenderCheck(p);
+}
+function rerenderCheck(p){
+  const box=document.querySelector(`[data-pid="${p.id}"] .tchk`); if(box) box.replaceWith(titlePanel(p));
+  const nm=document.querySelector(`[data-pid="${p.id}"] .nm`); if(nm){ const b=nm.querySelector('.tbadge'); if(b) b.remove(); const nb=titleBadge(p); if(nb && !(p.check&&p.check.busy)) nm.appendChild(nb); }
+}
+function titlePanel(p){
+  const c=p.check;
+  const ICON={ok:'✅',missing:'❌',notfound:'❌',changed:'🔄',area:'⚠️',adj:'❓',near:'📍',err:'⚠️'};
+  const head=el('h4',null, el('span',null,'Title check'), c&&c.busy? el('span',{className:'spin'}) : el('button',{className:'btn sec small',onclick:()=>checkTitles(p)}, c?'Check again':'Double-check titles'));
+  if(!c || (c.busy && !c.items)) return el('div',{className:'tchk'}, head, el('div',{className:'hint'}, c&&c.busy?'Checking each title against the QLD Globe and NSW cadastre…':'Confirms every lot against the live QLD Globe / NSW cadastre, flags missing or changed titles, and looks for other lots on the same plan next to this property.'));
+  const order={missing:0,notfound:0,changed:1,area:2,err:3,adj:4,ok:5,near:6};
+  const rows=[...c.items].sort((a,b)=>order[a.k]-order[b.k]).map(i=>{
+    const acts=[];
+    if(i.k==='changed') acts.push(el('button',{className:'btn small',onclick:()=>{ const l=p.lots.find(x=>x.id===i.id&&x.state===i.st); if(l&&i.live){ Object.assign(l,{geo:i.live.geo,calcArea:i.live.calcArea,titleArea:i.live.titleArea}); recalc(p); save(); drawProp(p); renderList(); checkTitles(p); } }},'Update to current boundary'));
+    if(i.k==='adj'||i.k==='near') acts.push(el('button',{className:'btn small',onclick:async e=>{ e.target.disabled=true; await addLotsTo(p,[i.id],i.st); }},'Add to property'));
+    if(i.k==='notfound') acts.push(el('button',{className:'btn sec small',onclick:async e=>{ e.target.disabled=true; await addLotsTo(p,[i.id],'auto'); checkTitles(p); }},'Try again'), el('button',{className:'btn sec small',onclick:()=>{ p.notFound=(p.notFound||[]).filter(x=>x.raw!==i.id); p.check.items=p.check.items.filter(x=>x!==i); p.check.issues=Math.max(0,p.check.issues-1); save(); rerenderCheck(p); }},'Dismiss'));
+    return el('div',{className:'ti'}, el('span',{className:'ic'},ICON[i.k]||'•'), el('div',{className:'tx'}, el('b',null,i.id), i.st? ` (${i.st})`:'', el('small',null,i.msg), acts.length? el('div',{className:'acts',style:'margin-top:4px'},acts):null));
+  });
+  const okN=c.items.filter(i=>i.k==='ok').length;
+  const sum = c.issues ? `${c.issues} thing${c.issues===1?'':'s'} to review. ${okN} of ${p.lots.length} lots match.` : `All ${okN} lot${okN===1?'':'s'} match the cadastre. No other lots on the same plan border this property.`;
+  return el('div',{className:'tchk'}, head, el('div',{className:'hint',style:'margin-bottom:4px'}, sum+` Checked ${new Date(c.t).toLocaleString('en-AU',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}.`), rows);
+}
+
+/* ---------- always load the newest version (no hard refresh needed) ---------- */
+(function versionWatch(){
+  const mine=(document.querySelector('meta[name="app-version"]')||{}).content; if(!mine || location.protocol==='file:') return;
+  const nv=$('#newver'); let latest=null;
+  async function check(){ try{ const r=await fetch(location.pathname+'?vcheck='+Date.now(),{cache:'no-store'}); const t=await r.text(); const m=t.match(/name="app-version" content="202611241212"]+)"/); if(!m || m[1]===mine) return;
+    latest=m[1]; let tried=null; try{ tried=sessionStorage.getItem('em-upd'); }catch(e){}
+    if(tried!==latest){ try{ sessionStorage.setItem('em-upd',latest); }catch(e){} location.replace(location.pathname+'?v='+encodeURIComponent(latest)+location.hash); return; }
+    nv.style.display='block'; }catch(e){} }
+  nv.onclick=()=> location.replace(location.pathname+'?v='+encodeURIComponent(latest||Date.now())+location.hash);
+  check(); document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') check(); }); setInterval(check, 30*60*1000);
+})();
 
 /* ---------- add property ---------- */
 /* lookup cache: repeat searches load instantly */
@@ -833,7 +949,10 @@ async function addLotsTo(prop, raws, pref){
   const errs=[]; let added=0;
   const notes=[];
   res.forEach(r=>{ if(r.skip) return; if(r.note) notes.push(r.note); if(r.error) errs.push(`${r.raw}: ${r.error}`); else r.lots.forEach(l=>{ if(!prop.lots.some(x=>x.id===l.id && x.state===l.state)){ prop.lots.push(l); added++; } }); });
+  const nf=res.filter(r=>r && r.error && r.raw).map(r=>({raw:r.raw, why:r.error}));
+  prop.notFound=(prop.notFound||[]).filter(x=>!res.some(r=>r && r.raw===x.raw && !r.error)).concat(nf.filter(x=>!(prop.notFound||[]).some(y=>y.raw===x.raw)));
   if(added){ recalc(prop); save(); drawProp(prop); renderList(); zoomTo(prop); }
+  if(added && props.includes(prop)) setTimeout(()=>checkTitles(prop,{fresh:true}),300);
   if(errs.length) toast(errs.join(' | '), true); else if(notes.length) toast(notes.join(' | ')); else if(added) toast(`Added ${added} lot${added===1?'':'s'} to ${prop.name}`);
   return added;
 }
@@ -849,7 +968,7 @@ $('#addbtn').addEventListener('click', async ()=>{
   const p = {id:uid(), name:$('#pname').value.trim() || ('Property '+(props.length+1)), cat:selCat, color:selCol, fill:0.25, lots:[], area:0, created:Date.now()};
   try{
     const n = await addLotsTo(p, raws, $('#pstate').value);
-    if(n){ props.push(p); save(); drawProp(p); openId=p.id; renderList(); $('#plots').value=''; $('#pname').value=''; }
+    if(n){ props.push(p); save(); drawProp(p); openId=p.id; renderList(); $('#plots').value=''; $('#pname').value=''; checkTitles(p,{fresh:true}); }
   } finally { btn.disabled=false; btn.textContent='Map titles'; }
 });
 
@@ -1186,9 +1305,11 @@ async function bulkRun(){
     let p = props.find(x=>x.name.toLowerCase()===g.name.toLowerCase());
     if(!p){ const c=catById(g.cat||selCat); p={id:uid(), name:g.name, cat:c.id, color:g.cat?c.hex:selCol, fill:0.25, lots:[], area:0, created:Date.now()}; props.push(p); nProps++; }
     lots.forEach(l=>{ if(!p.lots.some(x=>x.id===l.id && x.state===l.state)){ p.lots.push(l); nLots++; } });
+    const nf=hits.filter(({r})=>r && r.error).map(({it,r})=>({raw:it.r, why:r.error})); p.notFound=(p.notFound||[]).filter(x=>!nf.some(y=>y.raw===x.raw)).concat(nf);
     recalc(p); drawProp(p); touched.push(p);
   });
   save(); renderList();
+  (async()=>{ for(const p of touched) await checkTitles(p,{fresh:true}); })();
   if(touched.length){ try{ map.fitBounds(L.featureGroup(touched.map(p=>propLayers[p.id])).getBounds(), {padding:[30,30], maxZoom:16}); }catch(e){} }
   const summary = el('div',{className:'hint',style:'font-size:13px;color:var(--text);margin-top:6px'}, `Mapped ${nLots} lot${nLots===1?'':'s'} across ${touched.length} propert${touched.length===1?'y':'ies'}${nProps<touched.length?` (${touched.length-nProps} existing propert${touched.length-nProps===1?'y':'ies'} updated)`:''}.`);
   const parts=[summary];
