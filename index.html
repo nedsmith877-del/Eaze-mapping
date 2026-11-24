@@ -514,10 +514,13 @@ function parseLot(raw){
 }
 /* PriceFinder / RP Data style titles: "L36, 40 RG165 & L49 RG228 & L28-29 RG427 & L2 SP243178", "Lot 1 Sec 2 DP758123" */
 const PF_GROUP = /^(?:lots?|l)\s*([\d][\d\s,\-–&a-z]*?)\s*(?:(?:sec(?:tion)?|s)\s*(\d+)\s*)?(?:on\s+)?([a-z]{1,5})\s*(\d+)$/i;
-function looksPF(text){ return /(^|[\s&;,])(lots?|l)\s*\d/i.test(text) && /[a-z]{1,5}\s*\d{2,}/i.test(text); }
+const NSW_GROUP = /^([\d][\d\s,\-–]*)\s*\/\s*([a-z0-9]*)\s*\/\s*([a-z]{1,5})\s*(\d+)$/i;
+function looksPF(text){ return (/(^|[\s&;,])(lots?|l)\s*\d/i.test(text) && /[a-z]{1,5}\s*\d{2,}/i.test(text)) || /\d\s*,\s*\d[\d\s,\-–]*\/\s*[a-z0-9]*\s*\/\s*[a-z]{1,5}\s*\d/i.test(text) || /\d\s*[-–]\s*\d+\s*\/\s*[a-z0-9]*\s*\/\s*[a-z]{1,5}\s*\d/i.test(text); }
 function expandPF(text){
   const out=[];
   String(text).replace(/&amp;/gi,'&').split(/\s*(?:&|;|\+|\band\b|\n)\s*/i).map(g=>g.replace(/\t/g,' ').trim()).filter(Boolean).forEach(g=>{
+    const n = NSW_GROUP.exec(g.replace(/\s+/g,' '));
+    if(n){ const plan=n[3].toUpperCase()+n[4]; n[1].split(/\s*,\s*|\s+/).filter(Boolean).forEach(part=>{ const r=/^(\d+)\s*[-–]\s*(\d+)$/.exec(part); const nums = r && +r[2]>=+r[1] && +r[2]-+r[1]<=300 ? Array.from({length:+r[2]-+r[1]+1},(_,i)=>+r[1]+i) : [part]; nums.forEach(x=> out.push(`${x}/${n[2]||''}/${plan}`)); }); return; }
     const m = PF_GROUP.exec(g.replace(/\s+/g,' '));
     if(!m){ out.push(...g.split(/\s*,\s*/).filter(Boolean)); return; }
     const plan = m[3].toUpperCase()+m[4], sec=m[2];
