@@ -118,7 +118,22 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
       <label>Colour</label>
       <div class="swatches" id="colpick"></div>
       <div class="acts"><button class="btn" id="addbtn">Find &amp; map property</button></div>
-      <div class="hint">Lots are looked up live on the QLD DCDB and NSW Spatial Services cadastre. Several lots added together are grouped as one property and their areas totalled.</div>
+      <div class="hint">Lots are looked up live on the QLD DCDB and NSW Spatial Services cadastre. Several lots added together are grouped as one property and their areas totalled. You can also enter a lot range (<b>1-5 RP123456</b>) or a whole plan (<b>SP123456</b>).</div>
+
+      <h2>Bulk search</h2>
+      <label for="bulk">Paste rows from Excel or a list. One title per row: <b>property name</b>, <b>lot/plan</b>, and optionally <b>category</b>.</label>
+      <textarea id="bulk" style="min-height:110px;font-family:Consolas,monospace;font-size:12.5px" placeholder="Smith Aggregation&#9;3RP123456&#9;Subject&#10;Smith Aggregation&#9;4RP123456&#10;Jones Downs&#9;1/DP754321&#9;Sale&#10;2SP998877"></textarea>
+      <div class="row">
+        <div><label for="bulkmode">Group by</label>
+          <select id="bulkmode"><option value="name">Property name (same name = one property)</option><option value="each">Each title is its own property</option><option value="one">All titles into one property</option></select></div>
+      </div>
+      <div class="acts">
+        <button class="btn" id="bulkbtn">Bulk search &amp; map</button>
+        <button class="btn sec" id="bulkfilebtn">Load .csv / .txt</button>
+        <input type="file" id="bulkfile" accept=".csv,.txt,text/csv,text/plain" hidden>
+      </div>
+      <div class="hint">Rows without a category use the category and colour picked above. Rows with no name are named by their lot/plan, and a name you've already used adds lots to that property. Columns can be separated by tabs (copied from Excel), commas or semicolons, and a header row is skipped.</div>
+      <div id="bulkres"></div>
 
       <h2>Your properties <span id="pcount" style="color:var(--muted);font-weight:400"></span></h2>
       <div id="plist"></div>
@@ -261,8 +276,15 @@ function parseLot(raw){
   let parts = rest.split(/[\/\s]+/).filter(Boolean);
   let lot = parts[0]||'';
   if(!section && parts.length>1) section = parts[1];
-  if(!lot) return {raw, error:'Missing lot number'};
-  return {raw, lot, section, prefix, plan};
+  return {raw, lot, section, prefix, plan, whole:!lot};
+}
+function expandRanges(raw){
+  // "1-5 RP123456", "Lots 1 to 5 on SP123", "1-3/DP456" -> one entry per lot
+  const m = raw.match(/^\s*(?:lots?\s+)?(\d+)\s*(?:-|to)\s*(\d+)\s*(.*\d.*)$/i);
+  if(!m) return [raw];
+  const a=+m[1], b=+m[2]; if(b<a || b-a>300) return [raw];
+  const out=[]; for(let i=a;i<=b;i++) out.push(i+' '+m[3].replace(/^\s*on\s+/i,'').replace(/^\s*\/\s*/,'/'));
+  return out.map(x=>x.replace(/^(\d+) \//,'$1/'));
 }
 function guessStates(p, pref){
   if(pref==='QLD'||pref==='NSW') return [pref];
@@ -273,8 +295,12 @@ function guessStates(p, pref){
 async function queryQLD(p){
   const lotplan = p.lot + p.plan;
   const base = {outFields:'*', returnGeometry:true, outSR:4326};
-  let j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`lotplan='${lotplan.replace(/'/g,"''")}'`}, base));
-  if(!j.features || !j.features.length) j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`lot='${p.lot.replace(/'/g,"''")}' AND plan='${p.plan.replace(/'/g,"''")}'`}, base)).catch(()=>({features:[]}));
+  let j;
+  if(p.whole){
+    j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`plan='${p.plan.replace(/'/g,"''")}'`}, base));
+    j.features = (j.features||[]).filter(f=>!/easement/i.test(String((f.attributes||{}).parcel_typ||'')));
+  } else j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`lotplan='${lotplan.replace(/'/g,"''")}'`}, base));
+  if(!p.whole && (!j.features || !j.features.length)) j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`lot='${p.lot.replace(/'/g,"''")}' AND plan='${p.plan.replace(/'/g,"''")}'`}, base)).catch(()=>({features:[]}));
   if(!j.features || !j.features.length) return null;
   return j.features.map(f=>{
     const a=f.attributes||{}; const geo=esriToGeo(f.geometry);
@@ -291,12 +317,12 @@ async function queryNSW(p){
   const planNo = parseInt(p.plan.replace(/^[A-Z]+/,''),10);
   let feats = [];
   try{
-    let where = `plannumber=${planNo} AND lotnumber='${esc(p.lot)}'` + (p.section?` AND sectionnumber='${esc(p.section)}'`:'');
+    let where = p.whole ? `plannumber=${planNo}` : `plannumber=${planNo} AND lotnumber='${esc(p.lot)}'` + (p.section?` AND sectionnumber='${esc(p.section)}'`:'');
     const j1 = await getJSON(NSW_CAD+'/9/query', Object.assign({where}, base));
     feats = (j1.features||[]).filter(f=>{ const a=f.attributes||{}; const lbl=String(a.planlabel||a.lotidstring||'').toUpperCase(); return !lbl || lbl.includes(p.prefix); });
-    if(!p.section && feats.length>1){ const noSec = feats.filter(f=>!(f.attributes||{}).sectionnumber); if(noSec.length) feats=noSec; }
+    if(!p.whole && !p.section && feats.length>1){ const noSec = feats.filter(f=>!(f.attributes||{}).sectionnumber); if(noSec.length) feats=noSec; }
   }catch(e){ console.warn('NSW plannumber query failed', e); }
-  if(!feats.length){
+  if(!feats.length && !p.whole){
     const where = 'lotidstring IN (' + ids.map(i=>`'${esc(i)}'`).join(',') + ')';
     const j = await getJSON(NSW_CAD+'/9/query', Object.assign({where}, base));
     feats = j.features||[];
@@ -306,7 +332,7 @@ async function queryNSW(p){
   return j.features.map(f=>{
     const a=f.attributes||{}; const geo=esriToGeo(f.geometry);
     let title=null; if(a.planlotarea){ const u=String(a.planlotareaunits||'').toLowerCase(); title = Number(a.planlotarea) * (u.startsWith('h')?10000 : u.startsWith('a')&&u!=='ar'?4046.8564224 : 1); }
-    return {state:'NSW', id:a.lotidstring||ids[0], lot:p.lot, plan:p.plan, geo, calcArea:geoArea(geo), titleArea:title, attrs:{
+    return {state:'NSW', id:a.lotidstring||(p.whole?`${a.lotnumber}/${a.sectionnumber||''}/${a.planlabel||p.plan}`:ids[0]), lot:a.lotnumber||p.lot, plan:p.plan, geo, calcArea:geoArea(geo), titleArea:title, attrs:{
       'Plan label':a.planlabel, 'Lot number':a.lotnumber, Section:a.sectionnumber, Urbanity:a.urbanity, 'Plan area':a.planlotarea? a.planlotarea+' '+(a.planlotareaunits||''):null
     }};
   });
@@ -421,8 +447,14 @@ async function lookup(raw, pref){
   }
   return {raw, error:'Not found in '+guessStates(p,pref).join(' or ')+' cadastre'};
 }
+async function pool(items, n, fn, onProgress){
+  const out=new Array(items.length); let i=0, done=0;
+  await Promise.all(Array.from({length:Math.min(n,items.length)}, async()=>{ while(i<items.length){ const k=i++; out[k]=await fn(items[k]); done++; if(onProgress) onProgress(done, items.length); } }));
+  return out;
+}
 async function addLotsTo(prop, raws, pref){
-  const res = await Promise.all(raws.map(r=>r.trim()).filter(Boolean).map(r=>lookup(r, pref)));
+  const list = raws.map(r=>r.trim()).filter(Boolean).flatMap(expandRanges);
+  const res = await pool(list, 4, r=>lookup(r, pref));
   const errs=[]; let added=0;
   res.forEach(r=>{ if(r.skip) return; if(r.error) errs.push(`${r.raw}: ${r.error}`); else r.lots.forEach(l=>{ if(!prop.lots.some(x=>x.id===l.id && x.state===l.state)){ prop.lots.push(l); added++; } }); });
   if(added){ recalc(prop); save(); drawProp(prop); renderList(); zoomTo(prop); }
@@ -439,6 +471,67 @@ $('#addbtn').addEventListener('click', async ()=>{
     if(n){ props.push(p); save(); drawProp(p); openId=p.id; renderList(); $('#plots').value=''; $('#pname').value=''; }
   } finally { btn.disabled=false; btn.textContent='Find & map property'; }
 });
+
+/* ---------- bulk search ---------- */
+const CAT_WORDS = {subject:'subject',subjects:'subject',quote:'quote',quotes:'quote',sale:'sale',sales:'sale',sold:'sale','for sale':'forsale',forsale:'forsale','for sales':'forsale',other:'other'};
+const looksLikeLot = c => /[A-Za-z]{1,5}\s*\d{2,}\s*$/.test(c) && /\d/.test(c);
+function splitCells(line){
+  const sep = line.includes('\t') ? '\t' : (line.includes(';') ? ';' : ',');
+  const out=[]; let cur='', q=false;
+  for(const ch of line){ if(ch==='"'){ q=!q; continue; } if(ch===sep && !q){ out.push(cur); cur=''; } else cur+=ch; }
+  out.push(cur); return out.map(c=>c.trim()).filter((c,i,a)=>c!==''||i<a.length-1);
+}
+function parseBulkRow(line){
+  const cells = splitCells(line).filter(c=>c!=='');
+  if(!cells.length) return null;
+  const lotIdx = cells.findIndex(looksLikeLot);
+  if(lotIdx<0) return {header:true, line};
+  let cat=null, name='';
+  cells.forEach((c,i)=>{ if(i===lotIdx) return; const k=c.toLowerCase().replace(/\s+/g,' ').trim(); if(!cat && CAT_WORDS[k]){ cat=CAT_WORDS[k]; return; } if(!name) name=c; });
+  const lots = cells[lotIdx].split(/\s*(?:&|\+|\band\b)\s*/i).filter(Boolean);
+  return {name, cat, lots};
+}
+async function bulkRun(){
+  const lines = $('#bulk').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ toast('Paste at least one row', true); return; }
+  const mode=$('#bulkmode').value, pref=$('#pstate').value;
+  const rows = lines.map(parseBulkRow).filter(r=>r && !r.header);
+  if(!rows.length){ toast('No lot/plan numbers found in the pasted rows', true); return; }
+  const groups = new Map();
+  rows.forEach((r,i)=>{
+    const key = mode==='one' ? '__one' : mode==='each' ? 'row'+i : (r.name ? r.name.toLowerCase() : 'row'+i);
+    if(!groups.has(key)) groups.set(key, {name: mode==='one' ? ($('#pname').value.trim()||'Bulk search '+new Date().toLocaleDateString('en-AU')) : (r.name || r.lots.join(' & ')), cat:r.cat, raws:[]});
+    const g=groups.get(key); if(!g.cat && r.cat) g.cat=r.cat; g.raws.push(...r.lots);
+  });
+  const items=[]; groups.forEach(g=> g.raws.flatMap(expandRanges).forEach(r=>items.push({g, r})));
+  const btn=$('#bulkbtn'), res=$('#bulkres'); btn.disabled=true;
+  const prog = el('div',{className:'hint'}, el('span',{className:'spin'}), ' Searching 0 of '+items.length+' titles…');
+  res.replaceChildren(prog);
+  const found = await pool(items, 4, it=>lookup(it.r, pref), (d,n)=>{ prog.lastChild.textContent=` Searching ${d} of ${n} titles…`; });
+  const errs=[]; let nProps=0, nLots=0; const touched=[];
+  groups.forEach(g=>{
+    const hits = items.map((it,i)=>({it, r:found[i]})).filter(x=>x.it.g===g);
+    const lots=[]; hits.forEach(({it,r})=>{ if(!r || r.skip) return; if(r.error) errs.push({name:g.name, raw:it.r, error:r.error}); else lots.push(...r.lots); });
+    if(!lots.length) return;
+    let p = props.find(x=>x.name.toLowerCase()===g.name.toLowerCase());
+    if(!p){ const c=catById(g.cat||selCat); p={id:uid(), name:g.name, cat:c.id, color:g.cat?c.hex:selCol, fill:0.25, lots:[], area:0, created:Date.now()}; props.push(p); nProps++; }
+    lots.forEach(l=>{ if(!p.lots.some(x=>x.id===l.id && x.state===l.state)){ p.lots.push(l); nLots++; } });
+    recalc(p); drawProp(p); touched.push(p);
+  });
+  save(); renderList(); btn.disabled=false;
+  if(touched.length){ try{ map.fitBounds(L.featureGroup(touched.map(p=>propLayers[p.id])).getBounds(), {padding:[30,30], maxZoom:16}); }catch(e){} }
+  const summary = el('div',{className:'hint',style:'font-size:13px;color:var(--navy);margin-top:6px'}, `Mapped ${nLots} lot${nLots===1?'':'s'} across ${touched.length} propert${touched.length===1?'y':'ies'}${nProps<touched.length?` (${touched.length-nProps} existing propert${touched.length-nProps===1?'y':'ies'} updated)`:''}.`);
+  const parts=[summary];
+  if(errs.length){
+    parts.push(el('table',{className:'tbl'}, el('thead',null, el('tr',null, el('th',null,`Not found (${errs.length})`), el('th',null,'Property'), el('th',null,'Reason'))), el('tbody',null, errs.map(e=> el('tr',null, el('td',null,e.raw), el('td',null,e.name), el('td',null,e.error)))) ));
+    parts.push(el('div',{className:'acts'}, el('button',{className:'btn sec small',onclick:()=>{ $('#bulk').value = errs.map(e=>`${e.name}\t${e.raw}`).join('\n'); toast('Not-found rows put back in the box to fix and retry'); }},'Put not-found rows back in the box')));
+  } else $('#bulk').value='';
+  res.replaceChildren(...parts);
+  toast(errs.length ? `Done: ${nLots} lots mapped, ${errs.length} not found` : `Done: ${nLots} lots mapped`, !!errs.length && !nLots);
+}
+$('#bulkbtn').addEventListener('click', ()=>bulkRun().catch(e=>{ $('#bulkbtn').disabled=false; toast('Bulk search failed: '+e.message, true); }));
+$('#bulkfilebtn').onclick=()=> $('#bulkfile').click();
+$('#bulkfile').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $('#bulk').value = await f.text(); e.target.value=''; toast('File loaded. Check the rows, then press Bulk search & map'); };
 
 /* ---------- reports (veg + land types inside the boundary) ---------- */
 async function identifyPolygon(url, layerIds, rings){
