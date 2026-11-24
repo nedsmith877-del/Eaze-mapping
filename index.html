@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LAWD Property Mapper</title>
+<title>Easy Mapping</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
 <style>
 :root{
-  --lawd-blue:#009FDF; --navy:#00213F; --sub:#B4D7EB;
+  --blue:#009FDF; --navy:#00213F; --sub:#B4D7EB;
   --grey1:#767171; --grey2:#999999; --green:#70AD47; --orange:#ED7D31; --yellow:#FFC000;
   --quote:#A23F97; --sale:#FF0000;
   --bg:#f4f7fa; --panel:#ffffff; --text:#1b2a38; --muted:#5d6b78; --line:#dbe3ea;
@@ -19,12 +19,12 @@ html,body{margin:0;height:100%;font-family:"Segoe UI",Arial,Helvetica,sans-serif
 #app{display:flex;height:100vh;width:100vw;overflow:hidden}
 #side{width:380px;min-width:300px;max-width:100%;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--line);z-index:1000}
 header{background:var(--navy);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}
-header .logo{width:30px;height:30px;border-radius:50%;background:var(--lawd-blue);display:grid;place-items:center;font-weight:700;font-size:13px}
+header .logo{width:30px;height:30px;border-radius:50%;background:var(--blue);display:grid;place-items:center;font-weight:700;font-size:13px}
 header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.3px}
 header small{display:block;color:var(--sub);font-size:11px;font-weight:400}
 #tabs{display:flex;background:var(--sub)}
 #tabs button{flex:1;border:0;background:transparent;padding:10px 4px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;border-bottom:3px solid transparent}
-#tabs button.on{border-bottom-color:var(--lawd-blue);background:#d6eaf5}
+#tabs button.on{border-bottom-color:var(--blue);background:#d6eaf5}
 .pane{display:none;overflow:auto;flex:1;padding:14px 16px}
 .pane.on{display:block}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--sub)}
@@ -32,10 +32,10 @@ h2:first-child{margin-top:0}
 label{font-size:12px;color:var(--muted);display:block;margin:8px 0 3px}
 input[type=text],textarea,select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:14px;background:#fff;color:var(--text)}
 textarea{resize:vertical;min-height:64px}
-input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outline-offset:-1px}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-offset:-1px}
 .row{display:flex;gap:8px}
 .row>*{flex:1}
-.btn{border:0;border-radius:6px;padding:9px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--lawd-blue);color:#fff}
+.btn{border:0;border-radius:6px;padding:9px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--blue);color:#fff}
 .btn:hover{filter:brightness(.93)}
 .btn.sec{background:#fff;color:var(--navy);border:1px solid var(--line)}
 .btn.small{padding:5px 8px;font-size:12px}
@@ -62,10 +62,10 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
 .tbl tr.subh td{background:var(--sub);color:var(--navy);font-weight:600}
 .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .lyr{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eef2f5;font-size:13px}
-.lyr input[type=checkbox]{width:16px;height:16px;accent-color:var(--lawd-blue)}
+.lyr input[type=checkbox]{width:16px;height:16px;accent-color:var(--blue)}
 .lyr span{flex:1}
-.lyr input[type=range]{width:80px;accent-color:var(--lawd-blue)}
-.lyr a{font-size:11px;color:var(--lawd-blue);text-decoration:none}
+.lyr input[type=range]{width:80px;accent-color:var(--blue)}
+.lyr a{font-size:11px;color:var(--blue);text-decoration:none}
 .legend-img{max-width:100%;display:block}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:5000;display:none;max-width:90vw;box-shadow:0 4px 16px rgba(0,0,0,.25)}
 #toast.err{background:#b00020}
@@ -75,7 +75,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
 .leaflet-popup-content{font-size:12.5px;max-height:300px;overflow:auto;margin:10px 12px}
 .leaflet-popup-content b{color:var(--navy)}
 .empty{color:var(--muted);font-size:13px;text-align:center;padding:24px 8px;border:1px dashed var(--line);border-radius:8px}
-.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--sub);border-top-color:var(--lawd-blue);border-radius:50%;animation:s 0.8s linear infinite;vertical-align:-2px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--sub);border-top-color:var(--blue);border-radius:50%;animation:s 0.8s linear infinite;vertical-align:-2px}
 @keyframes s{to{transform:rotate(360deg)}}
 #mobtoggle{display:none}
 @media (max-width:760px){
@@ -93,8 +93,8 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
 <div id="app">
   <aside id="side">
     <header>
-      <div class="logo">L</div>
-      <div><h1>LAWD Property Mapper</h1><small>QLD &amp; NSW lot / plan mapping</small></div>
+      <div class="logo">E</div>
+      <div><h1>Easy Mapping</h1><small>QLD &amp; NSW lot / plan mapping</small></div>
     </header>
     <nav id="tabs">
       <button data-tab="props" class="on">Properties</button>
@@ -106,7 +106,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
     <section class="pane on" id="pane-props">
       <h2>Add a property</h2>
       <label for="pname">Property name</label>
-      <input type="text" id="pname" placeholder="e.g. Smith Aggregation">
+      <input type="text" id="pname" placeholder="e.g. Example Aggregation">
       <label for="plots">Lot / plan numbers (one per line or comma separated)</label>
       <textarea id="plots" placeholder="QLD: 3RP123456 or Lot 3 on SP123456&#10;NSW: 1/DP123456 or 1/2/DP7890"></textarea>
       <div class="row">
@@ -122,7 +122,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
 
       <h2>Bulk search</h2>
       <label for="bulk">Paste rows from Excel or a list. One title per row: <b>property name</b>, <b>lot/plan</b>, and optionally <b>category</b>.</label>
-      <textarea id="bulk" style="min-height:110px;font-family:Consolas,monospace;font-size:12.5px" placeholder="Smith Aggregation&#9;3RP123456&#9;Subject&#10;Smith Aggregation&#9;4RP123456&#10;Jones Downs&#9;1/DP754321&#9;Sale&#10;2SP998877"></textarea>
+      <textarea id="bulk" style="min-height:110px;font-family:Consolas,monospace;font-size:12.5px" placeholder="Example Aggregation&#9;3RP123456&#9;Subject&#10;Example Aggregation&#9;4RP123456&#10;Example Downs&#9;1/DP754321&#9;Sale&#10;2SP998877"></textarea>
       <div class="row">
         <div><label for="bulkmode">Group by</label>
           <select id="bulkmode"><option value="name">Property name (same name = one property)</option><option value="each">Each title is its own property</option><option value="one">All titles into one property</option></select></div>
@@ -184,9 +184,9 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
 (function(){
 "use strict";
 
-/* ---------- LAWD palette ---------- */
+/* ---------- colour palette ---------- */
 const PALETTE = [
-  {name:'LAWD Blue', hex:'#009FDF'}, {name:'Table Header', hex:'#00213F'}, {name:'Table Blue Subheader', hex:'#B4D7EB'},
+  {name:'Blue', hex:'#009FDF'}, {name:'Navy', hex:'#00213F'}, {name:'Light Blue', hex:'#B4D7EB'},
   {name:'Grey 1', hex:'#767171'}, {name:'Grey 2', hex:'#999999'}, {name:'Green', hex:'#70AD47'},
   {name:'Orange', hex:'#ED7D31'}, {name:'Yellow', hex:'#FFC000'}, {name:'Quotes Purple', hex:'#A23F97'}, {name:'Sales Red', hex:'#FF0000'}
 ];
@@ -350,7 +350,8 @@ async function queryNSW(p){
 }
 
 /* ---------- state ---------- */
-const KEY='lawd-property-mapper-v1';
+const KEY='easy-mapping-v1';
+(function migrate(){ try{ const o='lawd-property-mapper-v1'; if(!localStorage.getItem(KEY) && localStorage.getItem(o)){ ['', '-base', '-ovl'].forEach(x=>{ const v=localStorage.getItem(o+x); if(v!=null) localStorage.setItem(KEY+x, v); localStorage.removeItem(o+x); }); } }catch(e){} })();
 let props = load(KEY, []);
 let selCat = 'subject', selCol = CATEGORIES[0].hex;
 const save = ()=> store(KEY, props);
@@ -668,7 +669,7 @@ document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',
 /* ---------- export / import ---------- */
 function download(name, text, type){ const a=el('a',{href:URL.createObjectURL(new Blob([text],{type})),download:name}); document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); }
 const stamp=()=>new Date().toISOString().slice(0,10);
-$('#expjson').onclick=()=> download(`lawd-properties-${stamp()}.json`, JSON.stringify({app:'lawd-property-mapper',version:1,properties:props},null,1),'application/json');
+$('#expjson').onclick=()=> download(`easy-mapping-properties-${stamp()}.json`, JSON.stringify({app:'easy-mapping',version:1,properties:props},null,1),'application/json');
 $('#impbtn').onclick=()=> $('#impfile').click();
 $('#impfile').onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
@@ -679,12 +680,12 @@ $('#impfile').onchange=async e=>{
   e.target.value='';
 };
 function geojsonAll(){ return {type:'FeatureCollection', features: props.flatMap(p=> p.lots.map(l=>({type:'Feature', geometry:l.geo, properties:{property:p.name, category:(catById(p.cat)||{}).name, colour:p.color, state:l.state, lotplan:l.id, calc_area_ha:+(l.calcArea/10000).toFixed(4), title_area_ha:l.titleArea?+(l.titleArea/10000).toFixed(4):null}})))}; }
-$('#expgeo').onclick=()=> download(`lawd-properties-${stamp()}.geojson`, JSON.stringify(geojsonAll()),'application/geo+json');
+$('#expgeo').onclick=()=> download(`easy-mapping-properties-${stamp()}.geojson`, JSON.stringify(geojsonAll()),'application/geo+json');
 $('#expcsv').onclick=()=>{
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const rows=[['Property','Category','State','Lot/plan','Calculated area (ha)','Title area (ha)','Calculated area (ac)']];
   props.forEach(p=>p.lots.forEach(l=>rows.push([p.name,(catById(p.cat)||{}).name,l.state,l.id,(l.calcArea/10000).toFixed(4),l.titleArea?(l.titleArea/10000).toFixed(4):'',(l.calcArea/4046.8564224).toFixed(2)])));
-  download(`lawd-property-areas-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
+  download(`easy-mapping-areas-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
 };
 function buildKML(list, title){
   const x=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -702,7 +703,7 @@ function buildKML(list, title){
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(title)}</name><open>1</open>${styles}${folders}</Document></kml>`;
 }
 const safeName = s=>String(s).replace(/[^A-Za-z0-9 _-]+/g,'').trim().replace(/\s+/g,'-')||'property';
-$('#expkml').onclick=()=>{ if(!props.length){ toast('No properties to export', true); return; } download(`lawd-properties-${stamp()}.kml`, buildKML(props,'LAWD properties'),'application/vnd.google-earth.kml+xml'); };
+$('#expkml').onclick=()=>{ if(!props.length){ toast('No properties to export', true); return; } download(`easy-mapping-properties-${stamp()}.kml`, buildKML(props,'Easy Mapping properties'),'application/vnd.google-earth.kml+xml'); };
 $('#printbtn').onclick=()=> window.print();
 $('#clearall').onclick=()=>{ if(!props.length||!confirmSafe('Remove all properties from this browser? Export first if you want a copy.')) return; props=[]; propGroup.clearLayers(); for(const k in propLayers) delete propLayers[k]; save(); renderList(); };
 

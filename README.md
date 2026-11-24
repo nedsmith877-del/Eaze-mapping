@@ -1,10 +1,10 @@
-# Eaze Mapping
+# Easy Mapping
 
-A browser app for mapping properties in Queensland and New South Wales from their lot/plan numbers. It uses the LAWD colour palette.
+A browser app for mapping properties in Queensland and New South Wales from their lot/plan numbers.
 
 ## Features
 - Look up lots on the live QLD DCDB and NSW Spatial Services cadastre (e.g. `3RP123456`, `Lot 3 on SP123456`, `1/DP123456`, `1/2/DP7890`), and group several lots into one property.
-- Colour properties by category, using the LAWD palette: Subject, Quote, Sale and For Sale.
+- Colour properties by category, Subject, Quote, Sale and For Sale.
 - See land area in hectares, acres and km², both measured from the boundary and as the title area.
 - Switch on vegetation and land layers:
   - QLD: regulated vegetation, regional ecosystems, essential habitat, wetlands, watercourses, PMAV, strategic cropping land, land types, land use (QLUMP), the floodplain assessment overlay and historic flood lines.
