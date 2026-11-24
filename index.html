@@ -156,6 +156,19 @@ body.snapping #snapbtn{display:none}
 .linkrow a{color:var(--blue2);font-weight:600;text-decoration:none;font-size:12px}
 .salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .lyr.dis{opacity:.45}
+.sw2{display:inline-block;width:16px;height:12px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.35)}
+.keyrow{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);padding:2px 0;line-height:1.25}
+.keyrow img{width:16px;height:16px;flex:none}
+#mapkey{position:absolute;z-index:1000;bottom:28px;left:436px;width:300px;max-width:calc(100% - 20px);max-height:46vh;display:none;flex-direction:column;border-radius:16px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 12px 32px rgba(0,0,0,.45)}
+#mapkey .kh{display:flex;align-items:center;gap:8px;padding:9px 12px;font-weight:700;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line)}
+#mapkey .kh span{flex:1}
+#mapkey .kb{overflow:auto;padding:6px 12px 10px}
+#mapkey.min .kb{display:none}
+#mapkey.min .kh{border-bottom:0}
+#mapkey .kt{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--blue2);font-weight:700;margin:8px 0 3px}
+body.side-hidden #mapkey{left:14px}
+body.snapping #mapkey{display:none!important}
+@media (max-width:760px){ #mapkey{left:10px} }
 #addr{position:absolute;z-index:1005;top:12px;right:62px;width:min(380px,calc(100% - 140px));}
 #addr form{display:flex;gap:6px;padding:6px;border-radius:14px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
 #addr input{flex:1;padding:8px 10px;font-size:13px;color:var(--text)}
@@ -205,7 +218,7 @@ body.snapping #ovsum{display:none!important}
 @media print{
   @page{size:A4 landscape;margin:10mm}
   html,body{height:auto}
-  #side,#toast,#ovsum,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
+  #side,#toast,#ovsum,#mapkey,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
   #app{display:block;height:auto;width:auto}
   #map{width:100%;height:100vh}
   body.printing-sales #map{height:120mm;border:1px solid #999}
@@ -366,6 +379,7 @@ body.snapping #ovsum{display:none!important}
   </div>
   <div id="ovsum"><div class="oh"><span>📍 What's on your properties</span><button id="ovsumclose" title="Close">×</button></div><div class="ob" id="ovsumbody"></div></div>
   <div id="addr"><form id="addrform"><input id="addrq" type="search" placeholder="Search an address or place, e.g. 12 Smith Rd Roma" autocomplete="off"><button class="btn small" type="submit">Search</button></form><div id="addrres"></div></div>
+  <div id="mapkey"><div class="kh" id="mapkeyh"><span>🗺️ Map key</span><b id="mapkeytog">–</b></div><div class="kb" id="mapkeyb"></div></div>
   <div id="lblhint">Zoom in closer to see lot &amp; plan numbers</div>
   <div id="map"></div>
 </div>
@@ -435,6 +449,42 @@ const OVERLAYS = [
   {id:'nlpcad', st:'NSW', name:'Lot & plan numbers on every parcel', url:NSW_CAD, layers:null, op:1, report:false, labels:true},
   {id:'ncad', st:'NSW', name:'Cadastre (lot boundaries)', url:NSW_CAD, layers:null, op:1, report:false}
 ];
+
+/* clearer vegetation colours (drawn by the government server through dynamic layers) */
+const VSTYLE = {
+  qrvm:{layer:109, field:'rvm_cat', items:[
+    {v:'A', c:'#D7263D', t:'Category A: offsets, compliance or declared areas (not to be cleared)'},
+    {v:'B', c:'#1B7F3B', t:'Category B: remnant vegetation'},
+    {v:'C', c:'#9CCC65', t:'Category C: high-value regrowth'},
+    {v:'R', c:'#F4B400', t:'Category R: regrowth along reef watercourses'},
+    {v:'Water', c:'#4FA3D9', t:'Water'},
+    {v:'X', c:null, t:'Category X: exempt / cleared (no colour)'}]},
+  qeh:{layer:5, items:[{c:'#8E44AD', t:'Essential habitat'}]},
+  qwet:{layer:4, items:[{c:'#2E86C1', t:'Vegetation management wetland'}]},
+  qhvr:{layer:13, items:[{c:'#B5D334', t:'High value regrowth'}]}
+};
+const hexRGBA = (h,a=255)=>{ const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255,a]; };
+const darker = h=> hexRGBA(h).slice(0,3).map(v=>Math.round(v*0.6)).concat(255);
+const sfs = h=> ({type:'esriSFS', style:'esriSFSSolid', color:hexRGBA(h), outline:{type:'esriSLS', style:'esriSLSSolid', color:darker(h), width:0.6}});
+function vstyleDynamic(id){
+  const st=VSTYLE[id]; if(!st) return null;
+  const renderer = st.field
+    ? {type:'uniqueValue', field1:st.field, uniqueValueInfos: st.items.filter(i=>i.c).map(i=>({value:i.v, label:i.t, symbol:sfs(i.c)}))}
+    : {type:'simple', symbol:sfs(st.items[0].c)};
+  return [{id:st.layer, source:{type:'mapLayer', mapLayerId:st.layer}, drawingInfo:{renderer}}];
+}
+const vstyleOK={};
+function vstyleCheck(o, dlJSON){
+  if(vstyleOK[o.id]) return vstyleOK[o.id];
+  const body=new URLSearchParams({bbox:'148,-27,148.01,-26.99', bboxSR:'4326', size:'64,64', format:'png32', transparent:'true', f:'json', dynamicLayers:dlJSON});
+  return vstyleOK[o.id]=fetch(o.url+'/export',{method:'POST',body}).then(r=>r.json()).then(j=>!j.error && !!j.href).catch(()=>true);
+}
+function vstyleColour(id, val){
+  const st=VSTYLE[id]; if(!st) return null; const v=String(val||'').toLowerCase();
+  if(!st.field) return st.items[0].c;
+  const it=st.items.find(i=> v===i.v.toLowerCase() || v.startsWith('category '+i.v.toLowerCase()) || v===i.t.toLowerCase());
+  return it? it.c : null;
+}
 
 /* ---------- helpers ---------- */
 const $ = s => document.querySelector(s);
@@ -641,7 +691,7 @@ async function setBase(name){
 }
 setBase(baseName).catch(()=> setBase(BASE_DEFS[0].name));
 L.control.zoom({position:'topright'}).addTo(map);
-$('#sidetoggle').onclick=()=>{ const h=$('#side').classList.toggle('hidden'); $('#sidetoggle').classList.toggle('out',h); $('#sidetoggle').textContent = h?'⟩':'⟨'; };
+$('#sidetoggle').onclick=()=>{ const h=$('#side').classList.toggle('hidden'); document.body.classList.toggle('side-hidden',h); $('#sidetoggle').classList.toggle('out',h); $('#sidetoggle').textContent = h?'⟩':'⟨'; };
 map.createPane('props'); map.getPane('props').style.zIndex = 450;
 
 const ovState = load(KEY+'-ovl', {});
@@ -649,6 +699,12 @@ const ovLayers = {};
 function makeOverlay(o){
   const opts = {url:o.url, opacity:(ovState[o.id]&&ovState[o.id].op)||o.op, f:'image', format:'png32'};
   if(o.layers) opts.layers=o.layers;
+  const dl=!o.noStyle && vstyleDynamic(o.id);
+  if(dl){ opts.dynamicLayers=JSON.stringify(dl); delete opts.layers;
+    const lyr=L.esri.dynamicMapLayer(opts);
+    vstyleCheck(o, opts.dynamicLayers).then(ok=>{ if(ok || o.noStyle) return; o.noStyle=true; console.warn('custom colours refused, using standard colours for', o.id);
+      const on=map.hasLayer(lyr); if(on) map.removeLayer(lyr); delete ovLayers[o.id]; delete VSTYLE[o.id]; if(on) applyOverlay(o); renderLegend(); });
+    return lyr; }
   return L.esri.dynamicMapLayer(opts);
 }
 
@@ -684,7 +740,7 @@ let openId=null;
 function openProp(id, scroll){ openId = id; renderList(); if(scroll){ const n=document.querySelector(`[data-pid="${id}"]`); if(n) n.scrollIntoView({block:'nearest'}); switchTab('props'); } }
 let ovSumT;
 function renderList(){
-  clearTimeout(ovSumT); ovSumT=setTimeout(()=>{ if(typeof renderOvSum==='function') renderOvSum(); }, 600);
+  clearTimeout(ovSumT); ovSumT=setTimeout(()=>{ if(typeof renderOvSum==='function') renderOvSum(); if(typeof renderMapKey==='function') renderMapKey(); }, 600);
   const list=$('#plist');
   $('#pcount').textContent = props.length?`(${props.length})`:'';
   if(!props.length){ list.replaceChildren(el('div',{className:'empty'},'No properties yet. Enter lot/plan numbers above to map your first property.')); $('#totals').replaceChildren(); return; }
@@ -1258,6 +1314,7 @@ async function overlayOnProp(o, p){
   return r;
 }
 async function legendSwatch(o){
+  if(VSTYLE[o.id]) return (val)=>{ const c=vstyleColour(o.id,val); return c? el('i',{className:'sw2',style:`background:${c}`}) : null; };
   try{ if(!legendCache[o.url]) legendCache[o.url]=await getJSON(o.url+'/legend',{}); }catch(e){ return ()=>null; }
   const ents=[]; (legendCache[o.url].layers||[]).forEach(l=>(l.legend||[]).forEach(i=>{ if(i.label) ents.push({lab:i.label.toLowerCase().trim(), layer:(l.layerName||'').toLowerCase(), src:`data:${i.contentType};base64,${i.imageData}`}); }));
   return (val, layer)=>{ const v=String(val).toLowerCase().trim(); if(!v) return null;
@@ -1649,6 +1706,7 @@ function drawPhotos(){
     m.bindPopup(()=>photoPopup(ph),{maxWidth:280}); m.bindTooltip(ph.name,{direction:'top',offset:[0,-6]});
     photoLayer.addLayer(m);
   });
+  setTimeout(renderMapKey,0);
   const on=$('#phshow').checked; if(on && !map.hasLayer(photoLayer)) photoLayer.addTo(map); if(!on) map.removeLayer(photoLayer);
 }
 function renderPhotos(){
@@ -1812,6 +1870,35 @@ async function refreshParcelLabels(){
 }
 map.on('moveend', ()=>{ clearTimeout(lblT); lblT=setTimeout(refreshParcelLabels, 350); });
 
+/* ---------- floating map key ---------- */
+async function renderMapKey(){
+  const box=$('#mapkey'), body=$('#mapkeyb'); if(!box) return;
+  const act=OVERLAYS.filter(o=>ovState[o.id]&&ovState[o.id].on&&!/cad$/.test(o.id));
+  const usedCats=[...new Set(props.filter(p=>p.lots.length).map(p=>p.cat))];
+  const parts=[];
+  if(usedCats.length){
+    parts.push(el('div',{className:'kt'},'Properties'));
+    CATEGORIES.filter(c=>usedCats.includes(c.id)).forEach(c=>{ const cols=[...new Set(props.filter(p=>p.cat===c.id).map(p=>p.color))];
+      parts.push(el('div',{className:'keyrow'}, ...cols.slice(0,3).map(col=>el('i',{className:'sw2',style:`background:${col}55;border:2px solid ${col}`})), c.name)); });
+  }
+  if(photos && photos.some(p=>p.lat!=null)) parts.push(el('div',{className:'keyrow'}, el('i',{className:'sw2',style:'background:#ED7D31;border-radius:50%;width:12px;border:2px solid #fff'}), 'Site photo'));
+  for(const o of act){
+    parts.push(el('div',{className:'kt'}, o.name));
+    if(VSTYLE[o.id]){ VSTYLE[o.id].items.forEach(i=> parts.push(el('div',{className:'keyrow'}, el('i',{className:'sw2',style:i.c?`background:${i.c}`:'background:transparent;border:1px dashed #9aa'}), i.t))); continue; }
+    try{
+      if(!legendCache[o.url]) legendCache[o.url]=await getJSON(o.url+'/legend',{});
+      let ls=(legendCache[o.url].layers||[]); if(o.layers) ls=ls.filter(l=>o.layers.includes(l.layerId) || o.layers.some(w=> w>=100 ? (l.layerId>w&&l.layerId<w+10) : false));
+      const ents=[]; ls.forEach(l=>(l.legend||[]).forEach(i=>ents.push(i)));
+      ents.slice(0,10).forEach(i=> parts.push(el('div',{className:'keyrow'}, el('img',{src:`data:${i.contentType};base64,${i.imageData}`,alt:''}), i.label||o.name)));
+      if(ents.length>10) parts.push(el('div',{className:'keyrow',style:'color:var(--muted)'}, `+ ${ents.length-10} more in the Layers tab`));
+      if(!ents.length) parts.push(el('div',{className:'keyrow',style:'color:var(--muted)'}, 'Key not available'));
+    }catch(e){ parts.push(el('div',{className:'keyrow',style:'color:var(--muted)'}, 'Key not available')); }
+  }
+  if(!parts.length){ box.style.display='none'; return; }
+  body.replaceChildren(...parts); box.style.display='flex';
+}
+$('#mapkeyh').onclick=()=>{ const m=$('#mapkey').classList.toggle('min'); $('#mapkeytog').textContent=m?'+':'–'; };
+
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
   $('#baselist').replaceChildren(...BASE_DEFS.map(d=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name))),
@@ -1838,10 +1925,11 @@ function applyOverlay(o){
 const legendCache={};
 async function renderLegend(){
   const box=$('#legend'); const on=OVERLAYS.filter(o=>ovState[o.id]&&ovState[o.id].on&&!/cad$/.test(o.id));
-  if(!on.length){ box.textContent='Switch on a layer to see its legend.'; return; }
+  if(!on.length){ box.textContent='Switch on a layer to see its legend.'; renderMapKey(); return; }
   box.replaceChildren(el('span',{className:'spin'}));
   const parts=[];
   for(const o of on){
+    if(VSTYLE[o.id]){ parts.push(el('div',{style:'margin-bottom:10px'}, el('div',{style:'font-weight:600;color:var(--text);margin:6px 0 4px'}, o.name), VSTYLE[o.id].items.map(i=> el('div',{className:'keyrow'}, el('i',{className:'sw2',style:i.c?`background:${i.c}`:'background:transparent;border:1px dashed #9aa'}), i.t)))); continue; }
     try{
       if(!legendCache[o.url]) legendCache[o.url]=await getJSON(o.url+'/legend',{});
       const want = o.layers;
@@ -1854,6 +1942,7 @@ async function renderLegend(){
     }catch(e){ parts.push(el('div',null, o.name+': legend unavailable')); }
   }
   box.replaceChildren(...parts);
+  renderMapKey();
 }
 
 /* ---------- tabs ---------- */
