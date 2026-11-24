@@ -156,10 +156,24 @@ body.snapping #snapbtn{display:none}
 .linkrow a{color:var(--blue2);font-weight:600;text-decoration:none;font-size:12px}
 .salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .lyr.dis{opacity:.45}
+#ovsum{position:absolute;z-index:1000;right:10px;bottom:28px;width:330px;max-width:calc(100% - 20px);max-height:48vh;display:none;flex-direction:column;border-radius:16px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 12px 32px rgba(0,0,0,.45);color:var(--text);font-size:12.5px}
+#ovsum .oh{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
+#ovsum .oh span{flex:1}
+#ovsum .oh button{background:none;border:0;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+#ovsum .ob{overflow:auto;padding:8px 12px 12px}
+#ovsum .ovn{font-weight:700;color:var(--blue2);margin:8px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+#ovsum .opn{display:flex;align-items:center;gap:6px;font-weight:600;margin:6px 0 2px}
+#ovsum .opn i{width:10px;height:10px;border-radius:3px;display:inline-block}
+#ovsum .ov{display:flex;align-items:center;gap:6px;padding:2px 0 2px 16px;color:#dce8f2}
+#ovsum .ov img{width:16px;height:16px;flex:none}
+#ovsum .ov .nm{color:var(--muted)}
+.popov{margin-top:6px;padding-top:6px;border-top:1px solid rgba(0,0,0,.12);font-size:12px}
+.popov b{display:block;margin-top:4px}
+body.snapping #ovsum{display:none!important}
 @media print{
   @page{size:A4 landscape;margin:10mm}
   html,body{height:auto}
-  #side,#toast,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
+  #side,#toast,#ovsum,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
   #app{display:block;height:auto;width:auto}
   #map{width:100%;height:100vh}
   body.printing-sales #map{height:120mm;border:1px solid #999}
@@ -298,6 +312,7 @@ body.snapping #snapbtn{display:none}
     <button class="btn sec small" id="snapcopy">Copy to paste</button>
     <button class="btn sec small" id="snapclose">Done</button>
   </div>
+  <div id="ovsum"><div class="oh"><span>📍 What's on your properties</span><button id="ovsumclose" title="Close">×</button></div><div class="ob" id="ovsumbody"></div></div>
   <div id="map"></div>
 </div>
 <div id="printsheet"></div>
@@ -523,6 +538,7 @@ const BASE_DEFS = [
   {name:'Satellite + roads & labels (Google hybrid style)', labels:true, make:()=> L.layerGroup([tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar'}), ROADS()])},
   {name:'Satellite only', labels:false, make:()=> tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar, Earthstar'})},
   {name:'Street map (Google Maps style)', labels:false, make:()=> tl(ESRI('World_Street_Map'),{attribution:'&copy; Esri, HERE, Garmin'})},
+  {name:'Light map (Google My Maps style)', labels:false, make:()=> tl('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{subdomains:'abcd', maxNativeZoom:20, attribution:'&copy; OpenStreetMap contributors &copy; CARTO'})},
   {name:'Terrain (Google terrain style)', labels:false, make:()=> tl(ESRI('World_Topo_Map'),{attribution:'&copy; Esri'})}
 ];
 const BASES = {};
@@ -570,7 +586,7 @@ function drawProp(p){
 function showPropPopup(p, latlng){
   const c = el('div',null, el('b',null,p.name), el('br'), (catById(p.cat)||{}).name||'', el('br'),
     `${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)`, el('br'), `${p.lots.length} lot(s): ${p.lots.map(l=>l.id).join(', ')}`,
-    p.sale&&p.sale.price? el('div',null, `${money(p.sale.price)}${p.sale.date?' · '+fmtDate(p.sale.date):''} · ${money(p.sale.price/(p.area/10000))}/ha`) : null, placeLinks(latlng));
+    p.sale&&p.sale.price? el('div',null, `${money(p.sale.price)}${p.sale.date?' · '+fmtDate(p.sale.date):''} · ${money(p.sale.price/(p.area/10000))}/ha`) : null, propOverlayInfo(p), placeLinks(latlng));
   L.popup().setLatLng(latlng).setContent(c).openOn(map);
 }
 const catById = id => CATEGORIES.find(c=>c.id===id);
@@ -584,7 +600,9 @@ function renderPickers(){
 /* ---------- UI: property list ---------- */
 let openId=null;
 function openProp(id, scroll){ openId = id; renderList(); if(scroll){ const n=document.querySelector(`[data-pid="${id}"]`); if(n) n.scrollIntoView({block:'nearest'}); switchTab('props'); } }
+let ovSumT;
 function renderList(){
+  clearTimeout(ovSumT); ovSumT=setTimeout(()=>{ if(typeof renderOvSum==='function') renderOvSum(); }, 600);
   const list=$('#plist');
   $('#pcount').textContent = props.length?`(${props.length})`:'';
   if(!props.length){ list.replaceChildren(el('div',{className:'empty'},'No properties yet. Enter lot/plan numbers above to map your first property.')); $('#totals').replaceChildren(); return; }
@@ -1132,6 +1150,77 @@ map.on('click', async e=>{
   pop.setContent(out);
 });
 
+/* ---------- what's on the property (for switched-on overlays) ---------- */
+const ovSumCache = new Map(); let ovSumRun = 0, ovSumClosed = false;
+const lotSig = p => p.lots.map(l=>l.id).join(',');
+const activeOverlays = ()=> OVERLAYS.filter(o=>ovState[o.id] && ovState[o.id].on && !/cad$/.test(o.id));
+async function overlayOnProp(o, p){
+  const key = o.id+'|'+p.id+'|'+lotSig(p);
+  if(ovSumCache.has(key)) return ovSumCache.get(key);
+  const job = (async()=>{
+    const found = new Map(); let err=null;
+    for(const l of p.lots.filter(l=>l.state===o.st)){
+      const polys = l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates;
+      for(const poly of polys){
+        try{ const j = await identifyPolygon(o.url, o.reportLayers||o.layers, geoToEsriRings({type:'Polygon',coordinates:poly}));
+          (j.results||[]).forEach(r=>{ const v=summariseResult(r,o)||'(mapped)'; const k=(r.layerName||'')+'||'+v; if(!found.has(k)) found.set(k,{layer:r.layerName||'', val:v}); });
+        }catch(e){ err=e.message; }
+      }
+    }
+    return {items:[...found.values()], err};
+  })();
+  ovSumCache.set(key, job);
+  const r = await job; if(r.err && !r.items.length) ovSumCache.delete(key);
+  return r;
+}
+async function legendSwatch(o){
+  try{ if(!legendCache[o.url]) legendCache[o.url]=await getJSON(o.url+'/legend',{}); }catch(e){ return ()=>null; }
+  const ents=[]; (legendCache[o.url].layers||[]).forEach(l=>(l.legend||[]).forEach(i=>{ if(i.label) ents.push({lab:i.label.toLowerCase().trim(), layer:(l.layerName||'').toLowerCase(), src:`data:${i.contentType};base64,${i.imageData}`}); }));
+  return (val, layer)=>{ const v=String(val).toLowerCase().trim(); if(!v) return null;
+    const lay=(layer||'').toLowerCase();
+    const pick = ents.find(e=>e.lab===v && (!lay||e.layer===lay)) || ents.find(e=>e.lab===v) || ents.find(e=>e.lab.length>1 && (v.startsWith(e.lab)||e.lab.startsWith(v)));
+    return pick ? el('img',{src:pick.src,alt:''}) : null; };
+}
+async function renderOvSum(justOn){
+  const box=$('#ovsum'), body=$('#ovsumbody');
+  const act = activeOverlays();
+  if(!act.length || !props.some(p=>p.lots.length)){ box.style.display='none'; return; }
+  if(justOn) ovSumClosed=false;
+  if(ovSumClosed) return;
+  const run = ++ovSumRun;
+  box.style.display='flex';
+  const order = justOn ? [justOn, ...act.filter(o=>o!==justOn)] : act;
+  const blocks = order.map(o=>({o, div:el('div')}));
+  body.replaceChildren(...blocks.map(b=>b.div));
+  for(const {o, div} of blocks){
+    const ps = props.filter(p=>p.lots.some(l=>l.state===o.st));
+    div.append(el('div',{className:'ovn'}, o.name));
+    if(!ps.length){ div.append(el('div',{className:'hint'}, `No ${o.st} properties mapped yet.`)); continue; }
+    const sw = await legendSwatch(o); if(run!==ovSumRun) return;
+    for(const p of ps){
+      const row = el('div', null, el('div',{className:'opn'}, el('i',{style:'background:'+p.color}), p.name), el('div',{className:'ov'}, el('span',{className:'spin'}), 'Checking…'));
+      div.append(row);
+      const r = await overlayOnProp(o, p); if(run!==ovSumRun) return;
+      row.lastChild.remove();
+      if(r.err && !r.items.length) row.append(el('div',{className:'ov',style:'color:var(--danger)'}, 'Could not read this layer: '+r.err));
+      else if(!r.items.length) row.append(el('div',{className:'ov nm'}, 'Nothing mapped on this property'));
+      else { const multi = new Set(r.items.map(i=>i.layer)).size>1;
+        r.items.sort((a,b)=>(a.layer+a.val).localeCompare(b.layer+b.val)).forEach(i=> row.append(el('div',{className:'ov'}, sw(i.val,i.layer)||el('span',{style:'width:16px;flex:none'}), el('span',null, multi&&i.layer? el('span',{className:'nm'}, i.layer+': ') : null, i.val)))); }
+    }
+  }
+}
+$('#ovsumclose').onclick=()=>{ ovSumClosed=true; ovSumRun++; $('#ovsum').style.display='none'; };
+function propOverlayInfo(p){
+  const act = activeOverlays().filter(o=>p.lots.some(l=>l.state===o.st)); if(!act.length) return null;
+  const box = el('div',{className:'popov'}, el('span',{className:'spin'}), ' Checking switched-on layers…');
+  (async()=>{ const parts=[];
+    for(const o of act){ const r = await overlayOnProp(o,p);
+      parts.push(el('b',null,o.name), r.items.length? r.items.slice(0,12).map(i=>el('div',null,i.val)) : el('div',{style:'opacity:.7'}, r.err?'Could not read this layer':'Nothing mapped on this property')); }
+    box.replaceChildren(el('div',{style:'font-weight:700'},'On this property'), ...parts.flat());
+  })();
+  return box;
+}
+
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
   $('#baselist').replaceChildren(...BASE_DEFS.map(d=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name))),
@@ -1139,7 +1228,7 @@ function renderLayersTab(){
   ['QLD','NSW'].forEach(st=>{
     $('#ovl-'+st).replaceChildren(...OVERLAYS.filter(o=>o.st===st).map(o=>{
       const s = ovState[o.id] || (ovState[o.id]={on:false, op:o.op});
-      const cb = el('input',{type:'checkbox',checked:!!s.on,onchange:e=>{ s.on=e.target.checked; applyOverlay(o); store(KEY+'-ovl',ovState); renderLegend(); }});
+      const cb = el('input',{type:'checkbox',checked:!!s.on,onchange:e=>{ s.on=e.target.checked; applyOverlay(o); store(KEY+'-ovl',ovState); renderLegend(); renderOvSum(s.on?o:null); }});
       const rg = el('input',{type:'range',min:0.1,max:1,step:0.05,value:s.op,title:'Transparency',oninput:e=>{ s.op=+e.target.value; if(ovLayers[o.id]) ovLayers[o.id].setOpacity(s.op); }, onchange:()=>store(KEY+'-ovl',ovState)});
       return el('div',{className:'lyr'}, cb, el('span',null,o.name), rg);
     }));
