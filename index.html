@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="app-version" content="202611241212">
+<meta name="app-version" content="202611242143">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Easy Mapping</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -899,7 +899,7 @@ function titlePanel(p){
 (function versionWatch(){
   const mine=(document.querySelector('meta[name="app-version"]')||{}).content; if(!mine || location.protocol==='file:') return;
   const nv=$('#newver'); let latest=null;
-  async function check(){ try{ const r=await fetch(location.pathname+'?vcheck='+Date.now(),{cache:'no-store'}); const t=await r.text(); const m=t.match(/name="app-version" content="202611241212"]+)"/); if(!m || m[1]===mine) return;
+  async function check(){ try{ const r=await fetch(location.pathname+'?vcheck='+Date.now(),{cache:'no-store'}); const t=await r.text(); const m=t.match(new RegExp('name="app-ver'+'sion" content="([^"]+)"')); if(!m || m[1]===mine) return;
     latest=m[1]; let tried=null; try{ tried=sessionStorage.getItem('em-upd'); }catch(e){}
     if(tried!==latest){ try{ sessionStorage.setItem('em-upd',latest); }catch(e){} location.replace(location.pathname+'?v='+encodeURIComponent(latest)+location.hash); return; }
     nv.style.display='block'; }catch(e){} }
