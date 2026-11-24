@@ -156,6 +156,9 @@ body.snapping #snapbtn{display:none}
 .linkrow a{color:var(--blue2);font-weight:600;text-decoration:none;font-size:12px}
 .salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .lyr.dis{opacity:.45}
+.leaflet-tooltip.parcellbl{background:transparent;border:0;box-shadow:none;padding:0;color:#fff;font:700 12px/1.1 Inter,Arial,sans-serif;text-shadow:0 0 3px #000,0 0 2px #000,0 0 1px #000;white-space:nowrap;pointer-events:none}
+.leaflet-tooltip.parcellbl:before{display:none}
+#lblhint{position:absolute;z-index:1000;left:50%;transform:translateX(-50%);top:14px;background:var(--panel);border:1px solid var(--line);color:var(--text);font-size:12px;padding:6px 12px;border-radius:10px;display:none;pointer-events:none}
 .ph{display:flex;gap:10px;align-items:center;padding:8px;margin-top:8px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .ph img{width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none;cursor:pointer}
 .ph .pi{flex:1;min-width:0}
@@ -352,6 +355,7 @@ body.snapping #ovsum{display:none!important}
     <button class="btn sec small" id="snapclose">Done</button>
   </div>
   <div id="ovsum"><div class="oh"><span>📍 What's on your properties</span><button id="ovsumclose" title="Close">×</button></div><div class="ob" id="ovsumbody"></div></div>
+  <div id="lblhint">Zoom in closer to see lot &amp; plan numbers</div>
   <div id="map"></div>
 </div>
 <div id="printsheet"></div>
@@ -410,12 +414,14 @@ const OVERLAYS = [
   {id:'qlu',  st:'QLD', name:'Land use (QLUMP)', url:QLD_LU, layers:[0], op:.55, report:true, valueFields:['secondary','tertiary']},
   {id:'qfpo', st:'QLD', name:'Flooding: floodplain assessment overlay', url:QLD_FPO, layers:[15], op:.5, report:true, valueFields:['sub_name'], valuePrefix:'Floodplain area: '},
   {id:'qfl',  st:'QLD', name:'Flooding: historic flood lines', url:QLD_FL, layers:[9], op:.7, report:true},
+  {id:'qlpcad', st:'QLD', name:'Lot & plan numbers on every parcel', url:QLD_CAD, layers:[4], op:1, report:false, labels:true},
   {id:'qcad', st:'QLD', name:'Cadastre (lot boundaries)', url:QLD_CAD, layers:[4], op:1, report:false},
   {id:'npct', st:'NSW', name:'State Vegetation Type Map (plant community types)', url:NSW_PCT, layers:null, op:.6, report:true},
   {id:'nasc', st:'NSW', name:'Soil types (Australian Soil Classification)', url:NSW_ASC, layers:[2], op:.55, report:true, valueField:'ASC_order'},
   {id:'nlsc', st:'NSW', name:'Land and soil capability (class 1-8)', url:NSW_LSC, layers:[2,1], op:.55, report:true, reportLayers:[1], valueField:'LSC_MstLmt', valuePrefix:'LSC class '},
   {id:'nlu',  st:'NSW', name:'Land use (2017)', url:NSW_LU, layers:[0], op:.55, report:true},
   {id:'nfld', st:'NSW', name:'Flooding: council flood planning areas', url:NSW_FLOOD, layers:[1], op:.55, report:true, valueFields:['LAY_CLASS','Class','EPI_NAME','EPI Name']},
+  {id:'nlpcad', st:'NSW', name:'Lot & plan numbers on every parcel', url:NSW_CAD, layers:null, op:1, report:false, labels:true},
   {id:'ncad', st:'NSW', name:'Cadastre (lot boundaries)', url:NSW_CAD, layers:null, op:1, report:false}
 ];
 
@@ -1011,10 +1017,10 @@ async function renderSnapshot(){
   const labels = [...cont.querySelectorAll('.leaflet-tooltip, .salecard')];
   for(const n of labels){
     const r=toFrame(n.getBoundingClientRect()); if(!hit(r) || r.w<2) continue;
-    const cs=getComputedStyle(n); const card=n.classList.contains('salecard');
-    ctx.save(); ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=6*k;
+    const cs=getComputedStyle(n); const card=n.classList.contains('salecard'); const plain=n.classList.contains('parcellbl');
+    if(!plain){ ctx.save(); ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=6*k;
     ctx.fillStyle = card ? '#ffffff' : (cs.backgroundColor||'rgba(7,20,34,.85)');
-    rrect(ctx, r.x, r.y, r.w, r.h, 6*k); ctx.fill(); ctx.restore();
+    rrect(ctx, r.x, r.y, r.w, r.h, 6*k); ctx.fill(); ctx.restore(); }
     if(card){ ctx.fillStyle=cs.borderLeftColor||'#009FDF'; ctx.fillRect(r.x, r.y, 5*k, r.h); }
     const lines = n.innerText.split('\n').map(t=>t.trim()).filter(Boolean);
     const fs = parseFloat(cs.fontSize)||12, lh = card? fs*1.35 : r.h/k;
@@ -1024,7 +1030,7 @@ async function renderSnapshot(){
       ctx.font = `${bold?600:400} ${(card&&i===0?fs+1:fs)*k}px Inter, Segoe UI, Arial, sans-serif`;
       ctx.fillStyle = card ? (i===0?'#00213F':'#1b2a38') : (cs.color||'#fff');
       if(card) ctx.fillText(t, r.x+(10*k), r.y+(6+lh*(i+0.5))*k);
-      else { ctx.textAlign='center'; ctx.fillText(t, r.x+r.w/2, r.y+r.h/2); ctx.textAlign='left'; }
+      else { ctx.textAlign='center'; if(plain){ ctx.lineWidth=3*k; ctx.strokeStyle='rgba(0,0,0,.85)'; ctx.lineJoin='round'; ctx.strokeText(t, r.x+r.w/2, r.y+r.h/2); } ctx.fillText(t, r.x+r.w/2, r.y+r.h/2); ctx.textAlign='left'; }
     });
   }
   // 4. small credit line
@@ -1662,6 +1668,48 @@ $('#phkmz').onclick=async e=>{
 };
 drawPhotos(); renderPhotos();
 
+/* ---------- lot & plan labels on every parcel ---------- */
+const LBL_MINZOOM = 15;
+const parcelLbl = L.layerGroup().addTo(map);
+let lblRun=0, lblT;
+function polyLabelPoint(rings){
+  // centroid of the largest outer ring; falls back to its middle vertex if the centroid lands outside (odd shapes)
+  let best=null, ba=0; rings.forEach(r=>{ const a=Math.abs(sArea(r)); if(a>ba){ ba=a; best=r; } }); if(!best) return null;
+  let cx=0, cy=0, A=0; for(let i=0,n=best.length;i<n-1;i++){ const [x1,y1]=best[i],[x2,y2]=best[i+1]; const f=x1*y2-x2*y1; A+=f; cx+=(x1+x2)*f; cy+=(y1+y2)*f; }
+  if(!A) return [best[0][1], best[0][0]];
+  cx/=3*A; cy/=3*A; if(pip([cx,cy],best)) return [cy,cx];
+  const m=best[Math.floor(best.length/2)]; return [(m[1]+best[0][1])/2, (m[0]+best[0][0])/2];
+}
+const STATE_BOX = {QLD:L.latLngBounds([-29.2,137.9],[-9,153.6]), NSW:L.latLngBounds([-37.6,140.9],[-28.1,153.7])};
+async function refreshParcelLabels(){
+  const on = OVERLAYS.filter(o=>o.labels && ovState[o.id] && ovState[o.id].on);
+  const run=++lblRun;
+  if(!on.length){ parcelLbl.clearLayers(); $('#lblhint').style.display='none'; return; }
+  if(map.getZoom() < LBL_MINZOOM){ parcelLbl.clearLayers(); $('#lblhint').style.display='block'; return; }
+  $('#lblhint').style.display='none';
+  const b=map.getBounds(); const px=(b.getEast()-b.getWest())/map.getSize().x;
+  const found=[];
+  for(const o of on){
+    if(!STATE_BOX[o.st].intersects(b)) continue;
+    const params={geometry:[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(','), geometryType:'esriGeometryEnvelope', inSR:4326, spatialRel:'esriSpatialRelIntersects', returnGeometry:true, outSR:4326, maxAllowableOffset:px*2, resultRecordCount:600};
+    try{
+      let j;
+      if(o.st==='QLD') j=await getJSON(QLD_CAD+'/4/query', Object.assign({outFields:'lotplan,lot,plan'}, params));
+      else j=await nswQuery(Object.assign({outFields:'lotidstring,lotnumber,sectionnumber,planlabel'}, params));
+      if(run!==lblRun) return;
+      (j.features||[]).forEach(f=>{ const a=f.attributes||{}; const g=f.geometry; if(!g||!g.rings) return;
+        let t = o.st==='QLD' ? (a.lotplan || ((a.lot||'')+(a.plan||''))) : (a.lotidstring ? a.lotidstring.replace(/\/\//,'/') : `${a.lotnumber||''}${a.sectionnumber?'/'+a.sectionnumber:''}/${a.planlabel||''}`);
+        if(!t || /^(null)?$/i.test(t)) return;
+        const pt=polyLabelPoint(g.rings); if(pt) found.push([t,pt]); });
+    }catch(e){ console.warn('lot/plan labels', e); }
+  }
+  if(run!==lblRun) return;
+  const seen=new Set(); parcelLbl.clearLayers();
+  found.forEach(([t,pt])=>{ const k=t+'|'+pt[0].toFixed(5)+'|'+pt[1].toFixed(5); if(seen.has(k)) return; seen.add(k);
+    parcelLbl.addLayer(L.tooltip({permanent:true, direction:'center', className:'parcellbl', interactive:false}).setLatLng(pt).setContent(t)); });
+}
+map.on('moveend', ()=>{ clearTimeout(lblT); lblT=setTimeout(refreshParcelLabels, 350); });
+
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
   $('#baselist').replaceChildren(...BASE_DEFS.map(d=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name))),
@@ -1678,6 +1726,7 @@ function renderLayersTab(){
 }
 function applyOverlay(o){
   const s=ovState[o.id]; if(!s) return;
+  if(o.labels) setTimeout(refreshParcelLabels, 0);
   if(s.on){ if(!ovLayers[o.id]) ovLayers[o.id]=makeOverlay(o); ovLayers[o.id].setOpacity(s.op); if(!map.hasLayer(ovLayers[o.id])) ovLayers[o.id].addTo(map); }
   else if(ovLayers[o.id] && map.hasLayer(ovLayers[o.id])) map.removeLayer(ovLayers[o.id]);
 }
