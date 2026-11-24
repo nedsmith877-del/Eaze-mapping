@@ -1256,8 +1256,8 @@ const SMALL = new Set(['on','and','with','of','the','in','to','or','a','an','ove
 const titleCase = t=> String(t).toLowerCase().replace(/\s+/g,' ').trim().split(' ').map((w,i)=> i && SMALL.has(w) ? w : w.replace(/(^|[-(\/])([a-z])/g,(m,a,b)=>a+b.toUpperCase())).join(' ');
 const LSC_NAMES = {1:'Class 1 - Extremely high capability land',2:'Class 2 - Very high capability land',3:'Class 3 - High capability land',4:'Class 4 - Moderate capability land',5:'Class 5 - Moderate-low capability land',6:'Class 6 - Low capability land',7:'Class 7 - Very low capability land',8:'Class 8 - Extremely low capability land'};
 const CC_SRC = {
-  QLD:{url:QLD_LT+'/1', fields:'lt_name_1,lt_name_2,lt_name_3,lt_name_4,lt_name_5,percent1,percent2,percent3,percent4,percent5', label:'Land Types of Queensland (DNRMMRRD)',
-       split:a=>{ const out=[]; for(let k=1;k<=5;k++){ const n=a['lt_name_'+k], pc=+a['percent'+k]||0; if(n && pc>0) out.push([titleCase(n), pc/100]); } if(!out.length && a.lt_name_1) out.push([titleCase(a.lt_name_1),1]); const t=out.reduce((s,x)=>s+x[1],0); return t>0? out.map(([n,f])=>[n,f/t]) : out; }},
+  QLD:{url:QLD_LT+'/1', fields:'lt_code_1,lt_name_1', label:'Land Types of Queensland (DNRMMRRD)',
+       split:a=> [[a.lt_name_1 ? titleCase(a.lt_name_1) : 'Unmapped', 1, a.lt_code_1||'']]},
   NSW:{url:NSW_LSC+'/1', fields:'LSC_MstLmt', label:'NSW Land and Soil Capability (DCCEEW)',
        split:a=> [[LSC_NAMES[a.LSC_MstLmt] || 'Unclassified', 1]]}
 };
@@ -1291,7 +1291,7 @@ async function computeLandTypes(p, status){
       if(!inter.length) continue;
       const a = multiArea(inter); if(a<1) continue; measured+=a;
       const c = multiCentre(inter);
-      src.split(f.attributes||{}).forEach(([name,frac])=>{ const r=rows.get(name)||{name,m2:0,cx:0,cy:0}; const w=a*frac; if(c){ r.cx=(r.cx*r.m2+c[0]*w)/(r.m2+w); r.cy=(r.cy*r.m2+c[1]*w)/(r.m2+w); } r.m2+=w; rows.set(name,r); });
+      src.split(f.attributes||{}).forEach(([name,frac,code])=>{ const r=rows.get(name)||{name,code:code||'',m2:0,cx:0,cy:0}; const w=a*frac; if(c){ r.cx=(r.cx*r.m2+c[0]*w)/(r.m2+w); r.cy=(r.cy*r.m2+c[1]*w)/(r.m2+w); } r.m2+=w; rows.set(name,r); });
     }
   }
   return {at:Date.now(), sources, rows:[...rows.values()].sort((a,b)=>b.m2-a.m2), measured, bounds: pb? [pb.getWest(),pb.getSouth(),pb.getEast(),pb.getNorth()] : null};
@@ -1301,9 +1301,9 @@ function ccRows(p){
   const lt=p.cc&&p.cc.lt; if(!lt) return [];
   const total = ccTotal(p); const scale = total / Math.max(p.area/10000, 1e-9);
   const out=[]; let other=0;
-  lt.rows.forEach(r=>{ const ha=r.m2/10000*scale; if(ha/total < 0.01) other+=ha; else out.push({name:r.name, ha, cx:r.cx, cy:r.cy}); });
+  lt.rows.forEach(r=>{ const ha=r.m2/10000*scale; if(ha/total < 0.01 || ha < 1) other+=ha; else out.push({name:r.name, code:r.code, ha, cx:r.cx, cy:r.cy}); });
   const sum = out.reduce((s,r)=>s+r.ha,0)+other; if(total-sum > 0) other += total-sum;
-  if(other>0.5) out.push({name:'Other', ha:other, other:true});
+  if(other>=1 && other/total>=0.005) out.push({name:'Other', ha:other, other:true}); else if(out.length) out[0].ha+=other;
   // whole hectares that add up to the total
   let rounded = out.map(r=>Math.round(r.ha)); const diff = Math.round(total) - rounded.reduce((a,b)=>a+b,0);
   if(rounded.length) rounded[0]+=diff; out.forEach((r,i)=>r.ha=rounded[i]);
@@ -1343,7 +1343,7 @@ function renderCC(){
 function drawCC(){
   const p=props.find(x=>x.id===$('#ccprop').value), out=$('#ccout');
   if(!p){ out.replaceChildren(); return; }
-  if(!p.cc || !p.cc.lt || p.cc.sig!==lotSig(p)){ out.replaceChildren(el('div',{className:'hint'}, 'Press "Work out land types" to measure this property.')); return; }
+  if(!p.cc || !p.cc.lt || p.cc.sig!==lotSig(p) || p.cc.v!==2){ out.replaceChildren(el('div',{className:'hint'}, 'Press "Work out land types" to measure this property.')); return; }
   const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total);
   if(p.cc.text==null) p.cc.text=draftText(p, rows);
   const unit = p.cc.unit||'AE';
@@ -1352,7 +1352,7 @@ function drawCC(){
   const lts = el('div',{className:'lawd'}, el('table',null,
     el('tr',null, el('th',{className:'bar',colSpan:3},'LAND TYPE SUMMARY')),
     el('tr',{className:'sub'}, el('th',null,'Land Type'), el('th',{className:'n'},'Approximate Area (ha)'), el('th',{className:'n'},'Proportion (%)')),
-    rows.map((r,i)=> el('tr',null, el('td',null,r.name), el('td',{className:'n'},fmt(r.ha)), el('td',{className:'n'},pct[i]+'%'))),
+    rows.map((r,i)=> el('tr',null, el('td',null, r.code? el('span',{style:'color:#6a7b88;font-size:11px;margin-right:5px'}, r.code) : null, r.name), el('td',{className:'n'},fmt(r.ha)), el('td',{className:'n'},pct[i]+'%'))),
     el('tr',{className:'tot'}, el('td',null,'TOTAL'), el('td',{className:'n'},fmt(total)), el('td',{className:'n'},'100%'))));
   // description
   const ta = el('textarea',{value:p.cc.text, oninput:e=>{ p.cc.text=e.target.value; save(); }});
@@ -1379,7 +1379,7 @@ function drawCC(){
   const lt=p.cc.lt;
   out.replaceChildren(lts, desc, ccBox,
     el('div',{className:'acts'}, el('button',{className:'btn',onclick:()=>copyCC(p)},'Copy tables for Word'), el('button',{className:'btn sec',onclick:()=>ccCSV(p)},'Download (.csv)')),
-    el('div',{className:'hint'}, `Source: ${lt.sources.join('; ')}. Measured ${new Date(lt.at).toLocaleString('en-AU')}. Areas are taken from the land type map inside the boundary and scaled to the ${ccTotal(p)*10000===p.titleArea?'title':'calculated'} area; land types under 1% are grouped as Other. Indicative only.`));
+    el('div',{className:'hint'}, `Source: ${lt.sources.join('; ')}. Measured ${new Date(lt.at).toLocaleString('en-AU')}. ${p.lots.some(l=>l.state==='QLD')?'QLD uses the dominant land type of each mapped unit, as in the Long Paddock FORAGE report. ':''}Areas are taken from the land type map inside the boundary and scaled to the ${ccTotal(p)*10000===p.titleArea?'title':'calculated'} area; land types under 1% are grouped as Other. Indicative only.`));
 }
 function ccHTML(p){
   const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total), unit=p.cc.unit||'AE';
@@ -1419,7 +1419,7 @@ $('#ccrun').onclick=async e=>{
   const status=m=> out.replaceChildren(el('div',{className:'hint'}, el('span',{className:'spin'}),' '+m));
   try{ status('Starting…'); const lt=await computeLandTypes(p, status);
     if(!lt.rows.length) throw new Error('No land type mapping found inside this boundary.');
-    const old=p.cc||{}; p.cc={lt, sig:lotSig(p), unit:old.unit||'AE', rates:old.rates||{}, text:null}; save(); drawCC();
+    const old=p.cc||{}; p.cc={v:2, lt, sig:lotSig(p), unit:old.unit||'AE', rates:old.rates||{}, text:null}; save(); drawCC();
   }catch(err){ out.replaceChildren(el('div',{className:'hint',style:'color:var(--danger)'}, 'Could not work out land types: '+err.message)); }
   btn.disabled=false;
 };
