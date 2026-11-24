@@ -433,47 +433,32 @@ const map = L.map('map', {zoomControl:true, preferCanvas:false}).setView([-25.5,
 const ESRI_IMG = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const tl = (u,o)=> L.tileLayer(u, Object.assign({maxZoom:21, maxNativeZoom:19}, o||{}));
 const ESRI = n=> `https://server.arcgisonline.com/ArcGIS/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
-const BASE_DEFS = [
-  {name:'Best imagery (QLD Globe + NSW SIX Maps)', labels:true, make:()=> L.layerGroup([
+const GOV_IMG = ()=> [
     tl(ESRI_IMG,{attribution:'&copy; Esri'}),
-    tl('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom:20, bounds:[[-37.6,140.9],[-28.1,153.7]], attribution:'&copy; NSW Spatial Services'}),
-    tl('https://spatial-img.information.qld.gov.au/arcgis/rest/services/Basemaps/LatestStateProgram_AllUsers/ImageServer/tile/{z}/{y}/{x}', {maxNativeZoom:20, bounds:[[-29.2,137.9],[-9.0,153.6]], attribution:'&copy; State of Queensland'})])},
-  {name:'Satellite + roads (hybrid)', labels:true, make:()=> L.layerGroup([tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar'}), tl(ESRI('Reference/World_Transportation'))])},
-  {name:'Satellite (Esri world imagery)', labels:true, make:()=> tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar, Earthstar'})},
-  {name:'Street map', labels:false, make:()=> tl(ESRI('World_Street_Map'),{attribution:'&copy; Esri, HERE, Garmin'})},
-  {name:'Topographic', labels:false, make:()=> tl(ESRI('World_Topo_Map'),{attribution:'&copy; Esri'})},
-  {name:'Google satellite', google:'satellite', labels:true},
-  {name:'Google satellite + roads (Google Earth style)', google:'hybrid', labels:false},
-  {name:'Google Maps (roads)', google:'roadmap', labels:false},
-  {name:'Google terrain', google:'terrain', labels:false}
+    tl('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {minZoom:12, maxNativeZoom:20, bounds:[[-37.6,140.9],[-28.1,153.7]], attribution:'&copy; NSW Spatial Services'}),
+    tl('https://spatial-img.information.qld.gov.au/arcgis/rest/services/Basemaps/LatestStateProgram_AllUsers/ImageServer/tile/{z}/{y}/{x}', {minZoom:12, maxNativeZoom:20, bounds:[[-29.2,137.9],[-9.0,153.6]], attribution:'&copy; State of Queensland'})];
+const ROADS = ()=> tl(ESRI('Reference/World_Transportation'));
+const BASE_DEFS = [
+  {name:'Best imagery (QLD Globe + NSW SIX Maps when zoomed in)', labels:true, make:()=> L.layerGroup(GOV_IMG())},
+  {name:'Best imagery + roads & labels (Google Earth style)', labels:true, make:()=> L.layerGroup([...GOV_IMG(), ROADS()])},
+  {name:'Satellite + roads & labels (Google hybrid style)', labels:true, make:()=> L.layerGroup([tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar'}), ROADS()])},
+  {name:'Satellite only', labels:false, make:()=> tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar, Earthstar'})},
+  {name:'Street map (Google Maps style)', labels:false, make:()=> tl(ESRI('World_Street_Map'),{attribution:'&copy; Esri, HERE, Garmin'})},
+  {name:'Terrain (Google terrain style)', labels:false, make:()=> tl(ESRI('World_Topo_Map'),{attribution:'&copy; Esri'})}
 ];
 const BASES = {};
 const LABELS = L.tileLayer(ESRI('Reference/World_Boundaries_and_Places'), {maxZoom:21, maxNativeZoom:19, pane:'overlayPane'});
-let gKey = load(KEY+'-gkey','');
-let googleReady = null;
-function loadScript(src){ return new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=src; sc.async=true; sc.onload=res; sc.onerror=()=>rej(new Error('Could not load '+src.split('?')[0])); document.head.append(sc); }); }
-function loadGoogle(){
-  if(!gKey) return Promise.reject(new Error('Add a Google Maps key first (Map layers tab)'));
-  if(!googleReady) googleReady = new Promise((res,rej)=>{
-    window.__gmReady = ()=> res();
-    window.gm_authFailure = ()=>{ toast('Google rejected the key. Check it is a Maps JavaScript API key with billing enabled.', true); };
-    loadScript(`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(gKey)}&callback=__gmReady&loading=async`).catch(rej);
-  }).then(()=> loadScript('https://unpkg.com/leaflet.gridlayer.googlemutant@0.14.1/dist/Leaflet.GoogleMutant.js'));
-  googleReady.catch(()=>{ googleReady=null; });
-  return googleReady;
-}
 async function getBase(name){
   if(BASES[name]) return BASES[name];
   const d = BASE_DEFS.find(x=>x.name===name) || BASE_DEFS[0];
-  if(d.google){ await loadGoogle(); BASES[d.name] = L.gridLayer.googleMutant({type:d.google, maxZoom:21}); }
-  else BASES[d.name] = d.make();
+  BASES[d.name] = d.make();
   return BASES[d.name];
 }
-let baseName = load(KEY+'-base2', BASE_DEFS[0].name); if(!BASE_DEFS.some(d=>d.name===baseName)) baseName=BASE_DEFS[0].name;
+let baseName = load(KEY+'-base3', BASE_DEFS[1].name); if(!BASE_DEFS.some(d=>d.name===baseName)) baseName=BASE_DEFS[1].name;
 async function setBase(name){
   let lyr; try{ lyr = await getBase(name); }catch(e){ toast(e.message, true); renderLayersTab(); return; }
   if(BASES[baseName] && map.hasLayer(BASES[baseName])) map.removeLayer(BASES[baseName]);
-  baseName = name; lyr.addTo(map); store(KEY+'-base2', name);
+  baseName = name; lyr.addTo(map); store(KEY+'-base3', name);
   const d = BASE_DEFS.find(x=>x.name===name);
   if(d && d.labels) LABELS.addTo(map); else map.removeLayer(LABELS);
 }
@@ -906,12 +891,7 @@ map.on('click', async e=>{
 
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
-  const keyIn = el('input',{type:'text',value:gKey,placeholder:'Paste Google Maps API key',style:'font-size:12px'});
-  $('#baselist').replaceChildren(...BASE_DEFS.map(d=>{ const off = d.google && !gKey;
-      return el('label',{className:'lyr'+(off?' dis':''),style:'margin:0;color:var(--text)',title:off?'Add a Google Maps key below to use this':''}, el('input',{type:'radio',name:'base',disabled:off,checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name+(off?' (needs key)':''))); }),
-    el('details',{style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--navy)'}, gKey?'Google Maps key saved':'Turn on Google map views'),
-      el('div',{className:'hint'},'Google satellite and road maps need your own free Google Maps API key (Google Cloud console, Maps JavaScript API). The key is only saved in this browser.'),
-      el('div',{className:'row',style:'margin-top:6px'}, keyIn, el('button',{className:'btn small',style:'flex:none',onclick:()=>{ gKey=keyIn.value.trim(); store(KEY+'-gkey',gKey); googleReady=null; renderLayersTab(); toast(gKey?'Google key saved':'Google key removed'); }},'Save'))),
+  $('#baselist').replaceChildren(...BASE_DEFS.map(d=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name))),
     el('div',{className:'hint',style:'margin-top:6px'},'Street View: click anywhere on the map, then choose Google Street View.'));
   ['QLD','NSW'].forEach(st=>{
     $('#ovl-'+st).replaceChildren(...OVERLAYS.filter(o=>o.st===st).map(o=>{
