@@ -156,9 +156,19 @@ body.snapping #snapbtn{display:none}
 .linkrow a{color:var(--blue2);font-weight:600;text-decoration:none;font-size:12px}
 .salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .lyr.dis{opacity:.45}
+#addr{position:absolute;z-index:1005;top:12px;right:62px;width:min(380px,calc(100% - 140px));}
+#addr form{display:flex;gap:6px;padding:6px;border-radius:14px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#addr input{flex:1;padding:8px 10px;font-size:13px;color:var(--text)}
+#addr button{flex:none}
+#addrres{margin-top:6px;border-radius:12px;background:var(--panel);border:1px solid var(--line);overflow:hidden;display:none;backdrop-filter:blur(14px)}
+#addrres div{padding:8px 12px;font-size:12.5px;cursor:pointer;color:var(--text);border-bottom:1px solid var(--line)}
+#addrres div:hover{background:rgba(0,159,223,.25)}
+.parcelpop b{font-size:14px}
+.parcelpop .acts{margin-top:8px}
+body.snapping #addr{display:none}
 .leaflet-tooltip.parcellbl{background:transparent;border:0;box-shadow:none;padding:0;color:#fff;font:700 12px/1.1 Inter,Arial,sans-serif;text-shadow:0 0 3px #000,0 0 2px #000,0 0 1px #000;white-space:nowrap;pointer-events:none}
 .leaflet-tooltip.parcellbl:before{display:none}
-#lblhint{position:absolute;z-index:1000;left:50%;transform:translateX(-50%);top:14px;background:var(--panel);border:1px solid var(--line);color:var(--text);font-size:12px;padding:6px 12px;border-radius:10px;display:none;pointer-events:none}
+#lblhint{position:absolute;z-index:1000;left:50%;transform:translateX(-50%);bottom:30px;background:var(--panel);border:1px solid var(--line);color:var(--text);font-size:12px;padding:6px 12px;border-radius:10px;display:none;pointer-events:none}
 .ph{display:flex;gap:10px;align-items:center;padding:8px;margin-top:8px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .ph img{width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none;cursor:pointer}
 .ph .pi{flex:1;min-width:0}
@@ -355,6 +365,7 @@ body.snapping #ovsum{display:none!important}
     <button class="btn sec small" id="snapclose">Done</button>
   </div>
   <div id="ovsum"><div class="oh"><span>📍 What's on your properties</span><button id="ovsumclose" title="Close">×</button></div><div class="ob" id="ovsumbody"></div></div>
+  <div id="addr"><form id="addrform"><input id="addrq" type="search" placeholder="Search an address or place, e.g. 12 Smith Rd Roma" autocomplete="off"><button class="btn small" type="submit">Search</button></form><div id="addrres"></div></div>
   <div id="lblhint">Zoom in closer to see lot &amp; plan numbers</div>
   <div id="map"></div>
 </div>
@@ -1183,7 +1194,7 @@ function placeLinks(ll){
 map.on('click', async e=>{
   if(placingPhoto){ const ph=placingPhoto; placingPhoto=null; document.body.classList.remove('placing'); ph.lat=+e.latlng.lat.toFixed(6); ph.lon=+e.latlng.lng.toFixed(6); ph.placed=true; savePhotos(); drawPhotos(); renderPhotos(); toast('Photo placed'); return; }
   const active = OVERLAYS.filter(o=>ovLayers[o.id] && map.hasLayer(ovLayers[o.id]) && !/cad$/.test(o.id));
-  if(!active.length){ L.popup().setLatLng(e.latlng).setContent(placeLinks(e.latlng)).openOn(map); return; }
+  if(!active.length || map.getZoom()>=13){ parcelPopup(e.latlng, active); return; }
   const pop = L.popup().setLatLng(e.latlng).setContent('<span class="spin"></span> Identifying…').openOn(map);
   const out = el('div');
   for(const o of active){
@@ -1601,7 +1612,7 @@ async function addPhotoFiles(files){
   toast(`${n} photo${n===1?'':'s'} added, ${located} with a location${n-located? `. Use "Place on map" for the other ${n-located}`:''}${bad? `. ${bad} HEIC photo(s) skipped: on iPhone choose "Most Compatible" or share as JPEG`:''}`, n===0);
 }
 function photoPopup(ph){
-  const box=el('div',{className:'phpop'}, el('b',null,ph.name), el('div',{style:'font-size:11px;color:#555'}, [ph.date, ph.dir!=null? `facing ${ph.dir}°`:'', `${ph.lat}, ${ph.lon}`].filter(Boolean).join(' · ')));
+  const box=el('div',{className:'phpop'}, el('b',null,ph.name), el('div',{style:'font-size:11px;color:var(--muted)'}, [ph.date, ph.dir!=null? `facing ${ph.dir}°`:'', `${ph.lat}, ${ph.lon}`].filter(Boolean).join(' · ')));
   phURL(ph).then(u=>{ if(u) box.prepend(el('img',{src:u,alt:ph.name})); });
   return box;
 }
@@ -1667,6 +1678,71 @@ $('#phkmz').onclick=async e=>{
   e.target.disabled=false;
 };
 drawPhotos(); renderPhotos();
+
+/* ---------- click a parcel to map it; address search ---------- */
+const pickLayer = L.geoJSON(null,{style:{color:'#FFC000',weight:3,fill:false,dashArray:'6 4'},interactive:false}).addTo(map);
+async function parcelAt(ll){
+  const out=[]; const pt={geometry:`${ll.lng},${ll.lat}`, geometryType:'esriGeometryPoint', inSR:4326, spatialRel:'esriSpatialRelIntersects', returnGeometry:true, outSR:4326};
+  const jobs=[];
+  if(STATE_BOX.QLD.contains(ll)) jobs.push(getJSON(QLD_CAD+'/4/query', Object.assign({outFields:'lotplan,lot,plan,lot_area,locality'}, pt)).then(j=>(j.features||[]).forEach(f=>{ const a=f.attributes||{}; if(a.lotplan) out.push({st:'QLD', id:a.lotplan, raw:a.lotplan, label:`Lot ${a.lot||''} on ${a.plan||''}`, area:a.lot_area, place:a.locality, rings:f.geometry&&f.geometry.rings}); })).catch(e=>console.warn(e)));
+  if(STATE_BOX.NSW.contains(ll)) jobs.push(nswQuery(Object.assign({outFields:'lotidstring,lotnumber,sectionnumber,planlabel'}, pt)).then(j=>(j.features||[]).forEach(f=>{ const a=f.attributes||{}; const id=a.lotidstring||`${a.lotnumber}/${a.sectionnumber||''}/${a.planlabel}`; out.push({st:'NSW', id, raw:id.replace(/\/\/+/,'/'), label:`Lot ${a.lotnumber||''}${a.sectionnumber?' Section '+a.sectionnumber:''} ${a.planlabel||''}`, rings:f.geometry&&f.geometry.rings}); })).catch(e=>console.warn(e)));
+  await Promise.all(jobs);
+  const seen=new Set(); return out.filter(x=>{ const k=x.st+x.id; if(seen.has(k)) return false; seen.add(k); return true; });
+}
+function mapParcel(x, into){
+  if(into){ addLotsTo(into, [x.raw], x.st); return; }
+  $('#plots').value = x.raw; $('#pstate').value = x.st; switchTab('props'); $('#addbtn').click();
+}
+async function parcelPopup(ll, active){
+  const pop=L.popup({maxWidth:320}).setLatLng(ll).setContent('<span class="spin"></span> Finding the parcel…').openOn(map);
+  const box=el('div',{className:'parcelpop'});
+  let found=[]; try{ found=await parcelAt(ll); }catch(e){}
+  pickLayer.clearLayers();
+  if(found.length){
+    found.forEach(x=>{
+      if(x.rings) pickLayer.addData({type:'Feature', geometry:{type:'Polygon', coordinates:esriToMulti(x.rings)[0]||x.rings}});
+      const cur = openId && props.find(q=>q.id===openId);
+      box.append(el('div',null, el('b',null, x.raw), el('div',{style:'font-size:12px;color:var(--muted)'}, [x.label, x.area? fmt(x.area/10000)+' ha':'', x.place||'', x.st].filter(Boolean).join(' · ')),
+        el('div',{className:'acts'}, el('button',{className:'btn small',onclick:()=>{ map.closePopup(); pickLayer.clearLayers(); mapParcel(x); }},'Map this lot'),
+          cur? el('button',{className:'btn sec small',onclick:()=>{ map.closePopup(); pickLayer.clearLayers(); mapParcel(x, cur); }}, 'Add to '+cur.name) : null)));
+    });
+  } else box.append(el('div',{style:'color:var(--muted);font-size:12px'}, 'No QLD or NSW parcel found here.'));
+  if(active && active.length){
+    for(const o of active){
+      try{ const j=await identifyPoint(o.url, o.reportLayers||o.layers, ll); const res=j.results||[];
+        box.append(el('div',{style:'margin-top:6px'}, el('b',null,o.name), res.length? res.slice(0,8).map(r=> el('div',null,(r.layerName?r.layerName+': ':'')+summariseResult(r,o))) : el('div',{style:'color:var(--muted)'},'Nothing mapped here')));
+      }catch(err){ box.append(el('div',null, el('b',null,o.name), el('div',{style:'color:var(--danger)'}, err.message))); }
+    }
+  }
+  box.append(placeLinks(ll)); pop.setContent(box);
+}
+map.on('popupclose', ()=> pickLayer.clearLayers());
+async function geocode(q){
+  try{
+    const j = await getJSON0('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&countryCode=AUS&maxLocations=6&outFields=Addr_type&SingleLine='+encodeURIComponent(q));
+    const c=(j.candidates||[]).filter(x=>x.score>=70); if(c.length) return c.map(x=>({name:x.address, lat:x.location.y, lon:x.location.x, type:x.attributes&&x.attributes.Addr_type}));
+  }catch(e){ console.warn('esri geocode', e); }
+  const j = await getJSON0('https://nominatim.openstreetmap.org/search?format=json&countrycodes=au&limit=6&q='+encodeURIComponent(q));
+  return (j||[]).map(x=>({name:x.display_name, lat:+x.lat, lon:+x.lon, type:x.type}));
+}
+let addrPin=null;
+function goAddress(r){
+  $('#addrres').style.display='none'; $('#addrq').value=r.name;
+  const ll=L.latLng(r.lat,r.lon); const exact = /PointAddress|StreetAddress|Subaddress|house|building/i.test(r.type||'');
+  map.setView(ll, exact?17:14);
+  if(addrPin) map.removeLayer(addrPin);
+  addrPin=L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:'#009FDF',fillOpacity:1,pane:'markerPane'}).addTo(map).bindTooltip(r.name,{direction:'top',offset:[0,-6]});
+  if(exact) setTimeout(()=>parcelPopup(ll, []), 400); else toast('Click the parcel you want to map');
+}
+$('#addrform').onsubmit=async e=>{
+  e.preventDefault(); const q=$('#addrq').value.trim(); if(!q) return;
+  const box=$('#addrres'); box.style.display='block'; box.replaceChildren(el('div',null, el('span',{className:'spin'}),' Searching…'));
+  let rs=[]; try{ rs=await geocode(q); }catch(err){ box.replaceChildren(el('div',null,'Search failed: '+err.message)); return; }
+  if(!rs.length){ box.replaceChildren(el('div',null,'No matches. Try adding the town or postcode.')); return; }
+  if(rs.length===1){ goAddress(rs[0]); return; }
+  box.replaceChildren(...rs.map(r=>el('div',{onclick:()=>goAddress(r)}, r.name)));
+};
+$('#addrq').addEventListener('input', ()=>{ if(!$('#addrq').value) $('#addrres').style.display='none'; });
 
 /* ---------- lot & plan labels on every parcel ---------- */
 const LBL_MINZOOM = 15;
