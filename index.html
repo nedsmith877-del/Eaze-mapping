@@ -299,6 +299,11 @@ const CATEGORIES = [
 /* ---------- Services ---------- */
 const QLD_CAD = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/PlanningCadastre/LandParcelPropertyFramework/MapServer';
 const NSW_CAD = 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Cadastre/MapServer';
+const NSW_CAD2 = 'https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/FeatureServer/8';
+async function nswQuery(params){ // SIX Maps first, NSW Spatial portal as backup
+  try{ return await getJSON(NSW_CAD+'/9/query', params); }
+  catch(e){ console.warn('SIX cadastre failed, trying portal', e); return await getJSON(NSW_CAD2+'/query', params); }
+}
 const QLD_VM  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Biota/VegetationManagement/MapServer';
 const QLD_RE  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Biota/RegionalEcosystemMapping/MapServer';
 const QLD_LT  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Environment/LandTypes/MapServer';
@@ -450,13 +455,13 @@ async function queryNSW(p){
   let feats = [];
   try{
     let where = p.whole ? `plannumber=${planNo}` : `plannumber=${planNo} AND lotnumber='${esc(p.lot)}'` + (p.section?` AND sectionnumber='${esc(p.section)}'`:'');
-    const j1 = await getJSON(NSW_CAD+'/9/query', Object.assign({where}, base));
+    const j1 = await nswQuery(Object.assign({where}, base));
     feats = (j1.features||[]).filter(f=>{ const a=f.attributes||{}; const lbl=String(a.planlabel||a.lotidstring||'').toUpperCase(); return !lbl || lbl.includes(p.prefix); });
     if(!p.whole && !p.section && feats.length>1){ const noSec = feats.filter(f=>!(f.attributes||{}).sectionnumber); if(noSec.length) feats=noSec; }
   }catch(e){ console.warn('NSW plannumber query failed', e); }
   if(!feats.length && !p.whole){
     const where = 'lotidstring IN (' + ids.map(i=>`'${esc(i)}'`).join(',') + ')';
-    const j = await getJSON(NSW_CAD+'/9/query', Object.assign({where}, base));
+    const j = await nswQuery(Object.assign({where}, base));
     feats = j.features||[];
   }
   if(!feats.length) return null;
@@ -651,7 +656,7 @@ async function addLotsTo(prop, raws, pref){
   return added;
 }
 function isBulkText(text){
-  return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).some(l=> l.includes('\t') || splitCells(l).filter(c=>c.trim()).some(c=>!looksLikeLot(c)));
+  return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).some(l=>{ if(l.includes('\t')) return true; const cells=splitCells(l).filter(c=>c.trim()); return cells.some(looksLikeLot) && cells.some(c=>!looksLikeLot(c)); });
 }
 $('#addbtn').addEventListener('click', async ()=>{
   if(isBulkText($('#plots').value)){ const btn=$('#addbtn'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Searching…'); try{ await bulkRun(); } catch(e){ toast('Search failed: '+e.message, true); } finally{ btn.disabled=false; btn.textContent='Map titles'; } return; }
@@ -847,7 +852,7 @@ $('#scsv').onclick=()=>{
     ...salesTableData().map(d=>[d.n,d.name,d.cat,d.lots,d.date,d.price?Math.round(d.price):'',d.ha.toFixed(2),d.perha?Math.round(d.perha):'',d.perac?Math.round(d.perac):'',d.dist!=null?d.dist.toFixed(1):'',d.notes])];
   download(`sales-table-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
 };
-$('#skml').onclick=()=>{ const d=salesTableData(); if(!d.length){ toast('Nothing to export', true); return; } download(`sales-map-${stamp()}.kml`, buildKML(d.map(x=>x.p), sState.title||'Sales map'),'application/vnd.google-earth.kml+xml'); };
+$('#skml').onclick=()=>{ const d=salesTableData(); if(!d.length){ toast('Nothing to export', true); return; } const lab=new Map(d.map(x=>[x.p, (x.n==='S'?'Subject: ':x.n+'. ')+x.name+(sState.price&&x.price?' ('+money(x.price)+')':'')])); download(`sales-map-${stamp()}.kml`, buildKML(d.map(x=>x.p), sState.title||'Sales map', p=>lab.get(p)),'application/vnd.google-earth.kml+xml'); };
 
 /* ---------- bulk search ---------- */
 const CAT_WORDS = {subject:'subject',subjects:'subject',quote:'quote',quotes:'quote',sale:'sale',sales:'sale',sold:'sale','for sale':'forsale',forsale:'forsale','for sales':'forsale',other:'other'};
@@ -1062,19 +1067,20 @@ $('#expcsv').onclick=()=>{
   props.forEach(p=>p.lots.forEach(l=>rows.push([p.name,(catById(p.cat)||{}).name,l.state,l.id,(l.calcArea/10000).toFixed(4),l.titleArea?(l.titleArea/10000).toFixed(4):'',(l.calcArea/4046.8564224).toFixed(2)])));
   download(`easy-mapping-areas-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
 };
-function buildKML(list, title){
+function buildKML(list, title, labelFn){
+  const nameOf = labelFn || (p=>p.name);
   const x=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const kcol=(hex,a)=>{ const h=hex.replace('#',''); return a+h.slice(4,6)+h.slice(2,4)+h.slice(0,2); };
   const ring=r=>`<LinearRing><tessellate>1</tessellate><coordinates>${r.map(c=>c[0]+','+c[1]+',0').join(' ')}</coordinates></LinearRing>`;
   const poly=pc=>`<Polygon><tessellate>1</tessellate><outerBoundaryIs>${ring(pc[0])}</outerBoundaryIs>${pc.slice(1).map(h=>`<innerBoundaryIs>${ring(h)}</innerBoundaryIs>`).join('')}</Polygon>`;
   const styles = [...new Set(list.map(p=>p.color))].map(c=>`<Style id="c${c.slice(1)}"><LineStyle><color>${kcol(c,'ff')}</color><width>3</width></LineStyle><PolyStyle><color>${kcol(c,'59')}</color></PolyStyle><LabelStyle><scale>0</scale></LabelStyle></Style><Style id="l${c.slice(1)}"><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle></Style>`).join('');
   const desc = p=>{ const cat=(catById(p.cat)||{}).name||'';
-    return `<![CDATA[<table style="font-family:Arial;font-size:12px;border-collapse:collapse"><tr><td colspan="2" style="background:#00213F;color:#fff;padding:4px 6px;font-weight:bold">${x(p.name)}</td></tr><tr><td style="padding:3px 6px">Category</td><td>${x(cat)}</td></tr><tr><td style="padding:3px 6px">Area</td><td>${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)</td></tr>${p.sale&&p.sale.price?`<tr><td style="padding:3px 6px">Price</td><td>${money(p.sale.price)} (${money(p.sale.price/(p.area/10000))}/ha)${p.sale.date?' · '+x(fmtDate(p.sale.date)):''}</td></tr>`:''}${p.titleArea?`<tr><td style="padding:3px 6px">Title area</td><td>${fmt(p.titleArea/10000)} ha</td></tr>`:''}<tr><td style="padding:3px 6px;background:#B4D7EB" colspan="2">Lots</td></tr>${p.lots.map(l=>`<tr><td style="padding:3px 6px">${x(l.state)} ${x(l.id)}</td><td>${fmt(l.calcArea/10000)} ha</td></tr>`).join('')}</table>]]>`; };
+    return `<![CDATA[<table style="font-family:Arial;font-size:12px;border-collapse:collapse"><tr><td colspan="2" style="background:#00213F;color:#fff;padding:4px 6px;font-weight:bold">${x(nameOf(p))}</td></tr><tr><td style="padding:3px 6px">Category</td><td>${x(cat)}</td></tr><tr><td style="padding:3px 6px">Area</td><td>${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)</td></tr>${p.sale&&p.sale.price?`<tr><td style="padding:3px 6px">Price</td><td>${money(p.sale.price)} (${money(p.sale.price/(p.area/10000))}/ha)${p.sale.date?' · '+x(fmtDate(p.sale.date)):''}</td></tr>`:''}${p.titleArea?`<tr><td style="padding:3px 6px">Title area</td><td>${fmt(p.titleArea/10000)} ha</td></tr>`:''}<tr><td style="padding:3px 6px;background:#B4D7EB" colspan="2">Lots</td></tr>${p.lots.map(l=>`<tr><td style="padding:3px 6px">${x(l.state)} ${x(l.id)}</td><td>${fmt(l.calcArea/10000)} ha</td></tr>`).join('')}</table>]]>`; };
   const folders = list.map(p=>{ if(!p.lots.length) return '';
     const c = geoBounds(p.lots.map(l=>l.geo)).getCenter();
     const lots = p.lots.map(l=>{ const ps=l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates;
-      return `<Placemark><name>${x(l.id)}</name><description>${desc(p)}</description><styleUrl>#c${p.color.slice(1)}</styleUrl><ExtendedData><Data name="Property"><value>${x(p.name)}</value></Data><Data name="Lot/plan"><value>${x(l.id)}</value></Data><Data name="Area (ha)"><value>${(l.calcArea/10000).toFixed(2)}</value></Data></ExtendedData><MultiGeometry>${ps.map(poly).join('')}</MultiGeometry></Placemark>`; }).join('');
-    return `<Folder><name>${x(p.name)} (${x((catById(p.cat)||{}).name||'')})</name><open>0</open><Placemark><name>${x(p.name)}</name><description>${desc(p)}</description><styleUrl>#l${p.color.slice(1)}</styleUrl><Point><coordinates>${c.lng},${c.lat},0</coordinates></Point></Placemark>${lots}</Folder>`; }).join('');
+      return `<Placemark><name>${x(l.id)}</name><description>${desc(p)}</description><styleUrl>#c${p.color.slice(1)}</styleUrl><ExtendedData><Data name="Property"><value>${x(nameOf(p))}</value></Data><Data name="Lot/plan"><value>${x(l.id)}</value></Data><Data name="Area (ha)"><value>${(l.calcArea/10000).toFixed(2)}</value></Data></ExtendedData><MultiGeometry>${ps.map(poly).join('')}</MultiGeometry></Placemark>`; }).join('');
+    return `<Folder><name>${x(nameOf(p))} (${x((catById(p.cat)||{}).name||'')})</name><open>0</open><Placemark><name>${x(nameOf(p))}</name><description>${desc(p)}</description><styleUrl>#l${p.color.slice(1)}</styleUrl><Point><coordinates>${c.lng},${c.lat},0</coordinates></Point></Placemark>${lots}</Folder>`; }).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(title)}</name><open>1</open>${styles}${folders}</Document></kml>`;
 }
 const safeName = s=>String(s).replace(/[^A-Za-z0-9 _-]+/g,'').trim().replace(/\s+/g,'-')||'property';
