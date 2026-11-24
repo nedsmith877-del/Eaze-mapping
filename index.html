@@ -1333,6 +1333,80 @@ function draftText(p, rows){
   return t;
 }
 const ccRates = load(KEY+'-rates', {});
+/* --- carrying capacity estimate: GLM long-term carrying capacity method (as used by FORAGE LTCC) ---
+   LTCC (AE) = median annual pasture growth (kg DM/ha) x safe utilisation x area / 2,920 kg (450 kg AE eating 8 kg DM/day).
+   Pasture growth is estimated from long-term median rainfall x a rainfall-use efficiency set by land type fertility,
+   reduced for hills/ranges (access) and discounted for land condition B/C/D (75%, 45%, 20% of A, as FORAGE). */
+const AE_INTAKE = 2920, DSE_PER_AE = 8;
+const COND = {A:{f:1, t:'A (good, as FORAGE)'}, B:{f:0.75, t:'B (fair)'}, C:{f:0.45, t:'C (poor)'}, D:{f:0.20, t:'D (very poor)'}};
+const LT_CLASSES = [
+  {k:'nil',  rue:0,   u:0,    re:/\b(estuar|island|lakebed|wetland|swamp|salt ?pan|saltpan|beach|dune|rock outcrop|mangrove|claypan|marine|urban|water)/i, t:'Not grazed'},
+  {k:'high', rue:6.0, u:0.30, re:/basalt|brigalow|black (soil|clay|earth)|cracking clay|downs|blackwood|softwood|belah|gidgee|bluegrass|alluvi|flood ?plain|frontage|brown clay|grey clay|clay plain|open downs|mitchell/i, t:'Fertile clays & alluvials'},
+  {k:'med',  rue:4.5, u:0.25, re:/box|coolibah|poplar|red earth|loam|bloodwood|blackbutt|cypress|wilga|myall|yapunyah|napunyah|mountain coolibah|bauhinia|silver.leaved|leopardwood|plain/i, t:'Moderate fertility woodlands'},
+  {k:'low',  rue:3.0, u:0.18, re:/ironbark|traprock|sand|spinifex|granit|lancewood|bendee|mulga|heath|tea.?tree|wattle|scribbly|shallow|gravel|stony|lateritic|desert|sandstone|tumbledown|cypress pine|ridge|range|hill|scarp|mesa|jump.?up/i, t:'Infertile or shallow country'},
+];
+const LSC_CLASS = {1:'high',2:'high',3:'high',4:'med',5:'med',6:'low',7:'low',8:'nil'};
+function ltClass(r){
+  const m = /^Class (\d)/.exec(r.name); if(m) return LT_CLASSES.find(c=>c.k===LSC_CLASS[+m[1]]);
+  if(/^AL/i.test(r.code||'')) return LT_CLASSES[0];
+  if(r.other) return LT_CLASSES.find(c=>c.k==='med');
+  const n=r.name;
+  // order matters: non-grazing, then infertile qualifiers (e.g. "on shallower soils") before fertile words
+  if(LT_CLASSES[0].re.test(n)) return LT_CLASSES[0];
+  const low=LT_CLASSES[3], high=LT_CLASSES[1], med=LT_CLASSES[2];
+  if(/traprock|spinifex|sandstone|granite|lancewood|bendee|mulga|heath|desert|lateritic/i.test(n)) return low;
+  if(high.re.test(n) && !/shallow|stony|gravel/i.test(n)) return high;
+  if(low.re.test(n)) return low;
+  if(med.re.test(n)) return med;
+  return med;
+}
+const steepFactor = n=> /\b(hill|hills|range|ranges|ridge|scarp|mountain|jump.?up|mesa|steep)\b/i.test(n) && !/plain/i.test(n) ? 0.75 : 1;
+function estRateHaAE(r, rain, cond){
+  const c=ltClass(r); if(!c || !c.rue || !rain) return null;
+  const growth = rain * c.rue * steepFactor(r.name);            // kg DM/ha/yr in A condition
+  const eaten = growth * c.u * (COND[cond]||COND.A).f;           // safely used kg/ha/yr
+  return eaten>0 ? AE_INTAKE/eaten : null;                       // ha per AE
+}
+function effRate(p, r){
+  const unit=p.cc.unit||'AE', key=r.name+'|'+unit;
+  if(p.cc.rates && p.cc.rates[key]!=null) return {v:p.cc.rates[key], est:false};
+  const e = p.cc.est && p.cc.est.rain ? estRateHaAE(r, p.cc.est.rain, p.cc.est.cond||'A') : null;
+  if(e!=null) return {v: +(unit==='DSE'? e/DSE_PER_AE : e).toFixed(unit==='DSE'?2:1), est:true};
+  if(ccRates[key]!=null) return {v:ccRates[key], est:false};
+  return {v:'', est:false};
+}
+async function siloRain(lat, lon, email){
+  const y=new Date().getFullYear()-1;
+  const u=`https://www.longpaddock.qld.gov.au/cgi-bin/silo/DataDrillDataset.php?lat=${(Math.round(lat*20)/20).toFixed(2)}&lon=${(Math.round(lon*20)/20).toFixed(2)}&start=${y-29}0101&finish=${y}1231&format=csv&comment=R&username=${encodeURIComponent(email)}&password=apirequest`;
+  const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),45000);
+  const txt = await (await fetch(u,{signal:ac.signal})).text(); clearTimeout(t);
+  const lines=txt.trim().split(/\r?\n/); const head=lines[0].split(',').map(h=>h.trim().toLowerCase());
+  const di=head.findIndex(h=>/date/.test(h)), ri=head.findIndex(h=>h==='daily_rain'||h==='rain');
+  if(di<0||ri<0) throw new Error('SILO: unexpected reply');
+  const years={}; lines.slice(1).forEach(l=>{ const c=l.split(','); const yr=(c[di]||'').slice(0,4); const v=parseFloat(c[ri]); if(/^\d{4}$/.test(yr) && !isNaN(v)) years[yr]=(years[yr]||0)+v; });
+  return {years, src:'Long Paddock SILO gridded rainfall'};
+}
+async function openMeteoRain(lat, lon){
+  const y=new Date().getFullYear()-1;
+  const j = await getJSON0(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&start_date=${y-29}-01-01&end_date=${y}-12-31&daily=precipitation_sum&timezone=Australia%2FBrisbane`);
+  const years={}; (j.daily&&j.daily.time||[]).forEach((d,i)=>{ const v=j.daily.precipitation_sum[i]; if(v!=null) years[d.slice(0,4)]=(years[d.slice(0,4)]||0)+v; });
+  return {years, src:'Open-Meteo ERA5 rainfall (backup source)'};
+}
+async function getJSON0(u){ const ac=new AbortController(); const t=setTimeout(()=>ac.abort(),45000); try{ const r=await fetch(u,{signal:ac.signal}); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); } finally{ clearTimeout(t); } }
+async function longTermRain(p){
+  const b=geoBounds(p.lots.map(l=>l.geo)); const c=b.getCenter();
+  const email=(load(KEY+'-silo','')||'').trim(); let res=null, err=null;
+  if(email){ try{ res=await siloRain(c.lat, c.lng, email); }catch(e){ err=e; } }
+  if(!res || Object.keys(res.years).length<10){ res=await openMeteoRain(c.lat, c.lng); }
+  const tot=Object.values(res.years).sort((a,b)=>a-b); if(tot.length<10) throw new Error('Not enough rainfall years');
+  const med = tot.length%2? tot[(tot.length-1)/2] : (tot[tot.length/2-1]+tot[tot.length/2])/2;
+  return {rain:Math.round(med), years:tot.length, src:res.src, at:Date.now(), lat:+c.lat.toFixed(3), lon:+c.lng.toFixed(3)};
+}
+async function runEstimate(p, statusEl){
+  if(statusEl) statusEl.replaceChildren(el('span',{className:'spin'}),' Getting 30 years of rainfall for the property…');
+  const cond = (p.cc.est&&p.cc.est.cond)||'A';
+  const r = await longTermRain(p); p.cc.est = Object.assign(r,{cond}); save();
+}
 function renderCC(){
   const sel=$('#ccprop'); const cur=sel.value;
   const ps=props.filter(p=>p.lots.length);
@@ -1347,7 +1421,7 @@ function drawCC(){
   const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total);
   if(p.cc.text==null) p.cc.text=draftText(p, rows);
   const unit = p.cc.unit||'AE';
-  const rateOf = r=> (p.cc.rates&&p.cc.rates[r.name]!=null)? p.cc.rates[r.name] : (ccRates[r.name+'|'+unit] ?? '');
+  const rateOf = r=> effRate(p,r).v;
   // land type summary
   const lts = el('div',{className:'lawd'}, el('table',null,
     el('tr',null, el('th',{className:'bar',colSpan:3},'LAND TYPE SUMMARY')),
@@ -1370,11 +1444,27 @@ function drawCC(){
     el('tr',null, el('th',{className:'bar',colSpan:4},'CARRYING CAPACITY')),
     el('tr',{className:'sub'}, el('th',null,'Land Type'), el('th',{className:'n'},'Area (ha)'), el('th',{className:'n'},`ha per ${unit}`), el('th',{className:'n'},unit)),
     rows.map((r,i)=>{ const c=el('td',{className:'n'}); aeCells.push(c);
-      const inp=el('input',{type:'number',min:0,step:'any',value:rateOf(r),placeholder:'rate',oninput:e=>{ const v=e.target.value===''?null:+e.target.value; p.cc.rates=p.cc.rates||{}; if(v==null) delete p.cc.rates[r.name]; else { p.cc.rates[r.name]=v; ccRates[r.name+'|'+unit]=v; store(KEY+'-rates',ccRates); } save(); recompute(); }});
-      return el('tr',null, el('td',null,r.name), el('td',{className:'n'},fmt(r.ha)), el('td',{className:'n'},inp), c); }),
+      const er=effRate(p,r); const key=r.name+'|'+unit;
+      const inp=el('input',{type:'number',min:0,step:'any',value:er.v,placeholder:'rate',title:er.est?'Estimated. Type over it to use your own rate.':'',style:er.est?'font-style:italic;background:#eef7ee':'',oninput:e=>{ const v=e.target.value===''?null:+e.target.value; p.cc.rates=p.cc.rates||{}; if(v==null) delete p.cc.rates[key]; else { p.cc.rates[key]=v; ccRates[key]=v; store(KEY+'-rates',ccRates); } e.target.style.cssText=''; save(); recompute(); }});
+      const cls=ltClass(r);
+      return el('tr',null, el('td',null,r.name, el('div',{style:'font-size:10.5px;color:#6a7b88'}, cls? cls.t : '')), el('td',{className:'n'},fmt(r.ha)), el('td',{className:'n'},inp), c); }),
     el('tr',{className:'tot'}, el('td',null,'TOTAL'), el('td',{className:'n'},fmt(total)), avgCell, totCell));
-  const ccBox = el('div',{className:'lawd'}, el('div',{style:'display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px'}, 'Rate unit:', unitSel), cct, big,
-    el('div',{style:'font-size:11px;color:#555;margin-top:4px'}, 'Rates are remembered for each land type, so the next property fills in automatically. Totals use only rows with a rate.'));
+  const est=p.cc.est||{}; const estStatus=el('div',{style:'font-size:11.5px;color:#333;margin:4px 0 8px'});
+  const condSel = el('select',{style:'width:auto;padding:4px 6px;background:#f4f9fc;color:#111;border:1px solid #9bb',onchange:e=>{ p.cc.est=Object.assign(p.cc.est||{}, {cond:e.target.value}); save(); drawCC(); }}, Object.entries(COND).map(([k,v])=>el('option',{value:k,selected:k===(est.cond||'A')},v.t)));
+  if(est.rain) estStatus.replaceChildren(`Median annual rainfall ${fmt(est.rain,0)} mm (${est.years} years, ${est.src}). Green italic rates are estimates; type over any of them to use your own.`);
+  else estStatus.replaceChildren('No rainfall yet. ', el('button',{className:'btn sec small',style:'color:#00213F;border-color:#9bb',onclick:async()=>{ try{ await runEstimate(p, estStatus); drawCC(); }catch(err){ estStatus.textContent='Could not get rainfall: '+err.message+'. You can still type rates in.'; } }},'Get rainfall & estimate'));
+  const resetBtn = el('button',{className:'btn sec small',style:'color:#00213F;border-color:#9bb',title:'Clear the rates you typed for this property and go back to the estimates',onclick:()=>{ p.cc.rates={}; save(); drawCC(); }},'Reset to estimates');
+  const ccBox = el('div',{className:'lawd'},
+    el('div',{style:'display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:4px;font-size:12px'}, 'Unit:', unitSel, 'Land condition:', condSel),
+    estStatus, cct, big,
+    el('div',{style:'display:flex;gap:6px;margin-top:6px'}, resetBtn),
+    el('details',{style:'font-size:11px;color:#444;margin-top:6px'}, el('summary',{style:'cursor:pointer;color:#00213F;font-weight:600'},'How the estimate is worked out'),
+      el('p',{style:'margin:4px 0'}, 'It follows the Grazing Land Management long-term carrying capacity method used by the Long Paddock FORAGE LTCC report: carrying capacity = long-term pasture growth × safe utilisation ÷ 2,920 kg (one AE is a 450 kg steer eating 8 kg of dry matter a day). Land is assumed fully watered.'),
+      el('p',{style:'margin:4px 0'}, 'Pasture growth is estimated from the 30-year median rainfall at the property × a rainfall-use efficiency for the land type: fertile clays and alluvials 6 kg/ha/mm with 30% safe use; moderate woodlands 4.5 kg/ha/mm, 25%; infertile or shallow country 3 kg/ha/mm, 18%. Hills and ranges are cut by 25% for access. Land condition B, C and D take 75%, 45% and 20% of A, as in FORAGE. DSE uses 1 AE = 8 DSE.'),
+      el('p',{style:'margin:4px 0'}, 'This is an indicative desktop estimate. For a property-specific government figure, order a free FORAGE "Long-Term Carrying Capacity" report for the lot on plan at longpaddock.qld.gov.au/forage and type its ha/AE figures over these.'),
+      el('label',{style:'display:block;margin-top:6px;color:#00213F;font-weight:600'},'Optional: your email for Long Paddock SILO rainfall (SILO asks for one; saved only in this browser)'),
+      el('input',{type:'email',value:load(KEY+'-silo',''),placeholder:'name@example.com',style:'width:100%;text-align:left;padding:5px',onchange:e=>{ store(KEY+'-silo',e.target.value.trim()); }}),
+      el('button',{className:'btn sec small',style:'margin-top:6px;color:#00213F;border-color:#9bb',onclick:async()=>{ try{ await runEstimate(p, estStatus); drawCC(); }catch(err){ estStatus.textContent='Could not get rainfall: '+err.message; } }},'Refresh rainfall')));
   recompute();
   const lt=p.cc.lt;
   out.replaceChildren(lts, desc, ccBox,
@@ -1393,10 +1483,11 @@ function ccHTML(p){
   rows.forEach((r,i)=> h+=`<tr>${td(esc(r.name))}${td(fmt(r.ha),1)}${td(pct[i]+'%',1)}</tr>`);
   h+=`<tr>${tot('TOTAL')}${tot(fmt(total),1)}${tot('100%',1)}</tr></table>`;
   h+=`<p style="font-family:Arial,Helvetica,sans-serif;font-size:10pt"><b>Topography, Vegetation &amp; Pastures:</b> ${esc(p.cc.text||'')}</p>`;
-  const rates=p.cc.rates||{}; let tAE=0, tHa=0;
+  let tAE=0, tHa=0;
   let c=`<table style="${T}"><tr><th colspan="4" style="${BAR}">CARRYING CAPACITY</th></tr><tr><th style="${SUB};text-align:left">Land Type</th><th style="${SUB};text-align:right">Area (ha)</th><th style="${SUB};text-align:right">ha per ${unit}</th><th style="${SUB};text-align:right">${unit}</th></tr>`;
-  rows.forEach(r=>{ const rt=+rates[r.name]; const ae=rt>0? r.ha/rt:0; if(rt>0){ tAE+=ae; tHa+=r.ha; } c+=`<tr>${td(esc(r.name))}${td(fmt(r.ha),1)}${td(rt>0?fmt(rt,1):'–',1)}${td(rt>0?fmt(ae,0):'–',1)}</tr>`; });
+  rows.forEach(r=>{ const rt=+effRate(p,r).v; const ae=rt>0? r.ha/rt:0; if(rt>0){ tAE+=ae; tHa+=r.ha; } c+=`<tr>${td(esc(r.name))}${td(fmt(r.ha),1)}${td(rt>0?fmt(rt,1):'–',1)}${td(rt>0?fmt(ae,0):'–',1)}</tr>`; });
   c+=`<tr>${tot('TOTAL')}${tot(fmt(total),1)}${tot(tAE?fmt(tHa/tAE,1):'–',1)}${tot(tAE?fmt(tAE,0):'–',1)}</tr></table>`;
+  const est=p.cc.est||{}; if(tAE){ const say = tAE>=1000? Math.round(tAE/50)*50 : tAE>=200? Math.round(tAE/10)*10 : Math.round(tAE); c+=`<p style="font-family:Arial,Helvetica,sans-serif;font-size:10pt">Estimated long-term carrying capacity of approximately ${fmt(say,0)} ${unit}${est.rain?` in ${est.cond||'A'} land condition, based on a median annual rainfall of ${fmt(est.rain,0)} mm`:''}.</p>`; }
   return h + (tAE? '<p></p>'+c : '');
 }
 async function copyCC(p){
@@ -1407,9 +1498,9 @@ async function copyCC(p){
   try{ document.execCommand('copy'); toast('Copied. Paste into your Word report'); }catch(e){ toast('Copy failed in this browser', true); } s.removeAllRanges(); d.remove();
 }
 function ccCSV(p){
-  const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total), unit=p.cc.unit||'AE', rates=p.cc.rates||{};
+  const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total), unit=p.cc.unit||'AE';
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const lines=[['Land type','Area (ha)','Proportion (%)',`ha per ${unit}`,unit], ...rows.map((r,i)=>{ const rt=+rates[r.name]; return [r.name, r.ha, pct[i], rt>0?rt:'', rt>0?Math.round(r.ha/rt):'']; }), ['TOTAL', total, 100, '', '']];
+  const lines=[['Land type','Area (ha)','Proportion (%)',`ha per ${unit}`,unit], ...rows.map((r,i)=>{ const rt=+effRate(p,r).v; return [r.name, r.ha, pct[i], rt>0?rt:'', rt>0?Math.round(r.ha/rt):'']; }), ['TOTAL', total, 100, '', '']];
   download(`${safeName(p.name)}-land-types-carrying-capacity.csv`, lines.map(r=>r.map(q).join(',')).join('\r\n'), 'text/csv');
 }
 $('#ccprop').onchange=drawCC;
@@ -1419,7 +1510,9 @@ $('#ccrun').onclick=async e=>{
   const status=m=> out.replaceChildren(el('div',{className:'hint'}, el('span',{className:'spin'}),' '+m));
   try{ status('Starting…'); const lt=await computeLandTypes(p, status);
     if(!lt.rows.length) throw new Error('No land type mapping found inside this boundary.');
-    const old=p.cc||{}; p.cc={v:2, lt, sig:lotSig(p), unit:old.unit||'AE', rates:old.rates||{}, text:null}; save(); drawCC();
+    const old=p.cc||{}; p.cc={v:2, lt, sig:lotSig(p), unit:old.unit||'AE', rates:old.rates||{}, est: old.est&&old.est.rain? old.est : {cond:(old.est&&old.est.cond)||'A'}, text:null}; save();
+    if(!p.cc.est.rain){ try{ await runEstimate(p, $('#ccout')); }catch(e){} }
+    drawCC();
   }catch(err){ out.replaceChildren(el('div',{className:'hint',style:'color:var(--danger)'}, 'Could not work out land types: '+err.message)); }
   btn.disabled=false;
 };
