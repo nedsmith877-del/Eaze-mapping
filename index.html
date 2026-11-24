@@ -137,8 +137,9 @@ details summary{outline:none}
 #snapframe .c{position:absolute;width:18px;height:18px;border:3px solid var(--blue2)}
 #snapframe .c1{left:-3px;top:-3px;border-right:0;border-bottom:0}#snapframe .c2{right:-3px;top:-3px;border-left:0;border-bottom:0}
 #snapframe .c3{left:-3px;bottom:-3px;border-right:0;border-top:0}#snapframe .c4{right:-3px;bottom:-3px;border-left:0;border-top:0}
-#snapbar{position:absolute;z-index:1060;display:none;flex-direction:column;gap:10px;align-items:stretch;width:180px;padding:14px;border-radius:14px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 10px 30px rgba(0,0,0,.45)}
-#snapbar select{width:100%;padding:9px 10px;font-size:14px}
+#snapbar{position:absolute;z-index:1060;display:none;flex-direction:column;gap:10px;align-items:stretch;width:180px;padding:14px;border-radius:14px;background:rgba(7,20,34,.45);border:1px solid rgba(255,255,255,.25);backdrop-filter:blur(3px);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#snapbar select{width:100%;padding:9px 10px;font-size:14px;background:rgba(7,20,34,.5)}
+#snapbar .btn.sec{background:rgba(255,255,255,.12)}
 #snapbar .btn{height:42px;font-size:14px;width:100%}
 #snapbar .sbh{font-size:15px;font-weight:700;color:#fff}
 #snapbar .sbl{font-size:12px;color:var(--muted);margin-bottom:-4px}
@@ -886,10 +887,10 @@ function snapRect(){
   const side = $('#side'); const sr = side.getBoundingClientRect();
   const sideOpen = !side.classList.contains('hidden') && window.innerWidth>760;
   const narrow = window.innerWidth<900;
-  const left = sideOpen ? sr.right + 20 : 20, right = m.width - (narrow?20:226), top = 60, bottom = m.height - (narrow?250:40);
+  const left = (sideOpen ? sr.right + 20 : 20) + (narrow?0:196), right = m.width - (narrow?20:64), top = 60, bottom = m.height - (narrow?250:40);
   let w = right-left, h = bottom-top;
   if(w/h > 4/3) w = h*4/3; else h = w*3/4;
-  const x = right - w, y = top + ((bottom-top)-h)/2;
+  const x = left, y = top + ((bottom-top)-h)/2;
   return {x:Math.round(x), y:Math.round(y), w:Math.round(w), h:Math.round(h)};
 }
 function placeSnap(){
@@ -898,7 +899,7 @@ function placeSnap(){
   Object.assign(f.style,{left:r.x+'px',top:r.y+'px',width:r.w+'px',height:r.h+'px',display:'block'});
   b.style.display='flex';
   if(window.innerWidth<900){ b.style.top=(r.y+r.h+12)+'px'; b.style.left=Math.max(10, r.x + r.w - b.offsetWidth)+'px'; }
-  else { b.style.left=(r.x+r.w+16)+'px'; b.style.top=Math.max(90, r.y)+'px'; }
+  else { b.style.left=(r.x-196)+'px'; b.style.top=r.y+'px'; }
 }
 function setSnap(on){
   snapOn=on; document.body.classList.toggle('snapping',on);
