@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAWD Property Mapper</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
+<style>
+:root{
+  --lawd-blue:#009FDF; --navy:#00213F; --sub:#B4D7EB;
+  --grey1:#767171; --grey2:#999999; --green:#70AD47; --orange:#ED7D31; --yellow:#FFC000;
+  --quote:#A23F97; --sale:#FF0000;
+  --bg:#f4f7fa; --panel:#ffffff; --text:#1b2a38; --muted:#5d6b78; --line:#dbe3ea;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:var(--text);background:var(--bg)}
+#app{display:flex;height:100vh;width:100vw;overflow:hidden}
+#side{width:380px;min-width:300px;max-width:100%;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--line);z-index:1000}
+header{background:var(--navy);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px}
+header .logo{width:30px;height:30px;border-radius:50%;background:var(--lawd-blue);display:grid;place-items:center;font-weight:700;font-size:13px}
+header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.3px}
+header small{display:block;color:var(--sub);font-size:11px;font-weight:400}
+#tabs{display:flex;background:var(--sub)}
+#tabs button{flex:1;border:0;background:transparent;padding:10px 4px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;border-bottom:3px solid transparent}
+#tabs button.on{border-bottom-color:var(--lawd-blue);background:#d6eaf5}
+.pane{display:none;overflow:auto;flex:1;padding:14px 16px}
+.pane.on{display:block}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--sub)}
+h2:first-child{margin-top:0}
+label{font-size:12px;color:var(--muted);display:block;margin:8px 0 3px}
+input[type=text],textarea,select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:14px;background:#fff;color:var(--text)}
+textarea{resize:vertical;min-height:64px}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outline-offset:-1px}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+.btn{border:0;border-radius:6px;padding:9px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;background:var(--lawd-blue);color:#fff}
+.btn:hover{filter:brightness(.93)}
+.btn.sec{background:#fff;color:var(--navy);border:1px solid var(--line)}
+.btn.small{padding:5px 8px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.hint{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+.swatches{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.sw{width:26px;height:26px;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.sw.on{box-shadow:0 0 0 2px var(--navy)}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.cat{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:6px;padding:7px 8px;cursor:pointer;font-size:13px;background:#fff}
+.cat.on{border-color:var(--navy);box-shadow:inset 0 0 0 1px var(--navy)}
+.dot{width:14px;height:14px;border-radius:3px;flex:none}
+.prop{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#fff;overflow:hidden}
+.prop .top{display:flex;align-items:center;gap:9px;padding:9px 10px;cursor:pointer}
+.prop .top .dot{width:18px;height:18px}
+.prop .nm{font-weight:600;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prop .meta{font-size:12px;color:var(--muted)}
+.prop .area{font-weight:600;font-size:13px;color:var(--navy);text-align:right;white-space:nowrap}
+.prop .body{display:none;border-top:1px solid var(--line);padding:10px;background:#fafcfd}
+.prop.open .body{display:block}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;margin:6px 0}
+.tbl th{background:var(--navy);color:#fff;text-align:left;padding:5px 6px;font-weight:600}
+.tbl td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl tr.subh td{background:var(--sub);color:var(--navy);font-weight:600}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.lyr{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eef2f5;font-size:13px}
+.lyr input[type=checkbox]{width:16px;height:16px;accent-color:var(--lawd-blue)}
+.lyr span{flex:1}
+.lyr input[type=range]{width:80px;accent-color:var(--lawd-blue)}
+.lyr a{font-size:11px;color:var(--lawd-blue);text-decoration:none}
+.legend-img{max-width:100%;display:block}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:5000;display:none;max-width:90vw;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+#toast.err{background:#b00020}
+#map{flex:1;height:100%}
+.leaflet-tooltip.plabel{background:rgba(0,33,63,.85);color:#fff;border:0;font-weight:600;font-size:12px;box-shadow:none}
+.leaflet-tooltip.plabel:before{display:none}
+.leaflet-popup-content{font-size:12.5px;max-height:300px;overflow:auto;margin:10px 12px}
+.leaflet-popup-content b{color:var(--navy)}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:24px 8px;border:1px dashed var(--line);border-radius:8px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--sub);border-top-color:var(--lawd-blue);border-radius:50%;animation:s 0.8s linear infinite;vertical-align:-2px}
+@keyframes s{to{transform:rotate(360deg)}}
+#mobtoggle{display:none}
+@media (max-width:760px){
+  #app{flex-direction:column}
+  #side{width:100%;height:52vh;border-right:0;border-bottom:1px solid var(--line)}
+  #map{height:48vh}
+}
+@media print{
+  #side,#toast,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
+  #map{width:100vw;height:100vh}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <header>
+      <div class="logo">L</div>
+      <div><h1>LAWD Property Mapper</h1><small>QLD &amp; NSW lot / plan mapping</small></div>
+    </header>
+    <nav id="tabs">
+      <button data-tab="props" class="on">Properties</button>
+      <button data-tab="layers">Map layers</button>
+      <button data-tab="data">Save / export</button>
+    </nav>
+
+    <!-- PROPERTIES -->
+    <section class="pane on" id="pane-props">
+      <h2>Add a property</h2>
+      <label for="pname">Property name</label>
+      <input type="text" id="pname" placeholder="e.g. Smith Aggregation">
+      <label for="plots">Lot / plan numbers (one per line or comma separated)</label>
+      <textarea id="plots" placeholder="QLD: 3RP123456 or Lot 3 on SP123456&#10;NSW: 1/DP123456 or 1/2/DP7890"></textarea>
+      <div class="row">
+        <div><label for="pstate">State</label>
+          <select id="pstate"><option value="auto">Auto detect</option><option value="QLD">QLD</option><option value="NSW">NSW</option></select></div>
+      </div>
+      <label>Category</label>
+      <div class="cats" id="catpick"></div>
+      <label>Colour</label>
+      <div class="swatches" id="colpick"></div>
+      <div class="acts"><button class="btn" id="addbtn">Find &amp; map property</button></div>
+      <div class="hint">Lots are looked up live on the QLD DCDB and NSW Spatial Services cadastre. Several lots added together are grouped as one property and their areas totalled.</div>
+
+      <h2>Your properties <span id="pcount" style="color:var(--muted);font-weight:400"></span></h2>
+      <div id="plist"></div>
+      <div id="totals" class="hint"></div>
+    </section>
+
+    <!-- LAYERS -->
+    <section class="pane" id="pane-layers">
+      <h2>Base map</h2>
+      <div id="baselist"></div>
+      <h2>Queensland (QLD Globe layers)</h2>
+      <div id="ovl-QLD"></div>
+      <h2>New South Wales</h2>
+      <div id="ovl-NSW"></div>
+      <div class="hint">Tip: click anywhere on the map to see what the switched-on layers say at that spot (vegetation category, regional ecosystem, land type, etc.). Some layers only draw when zoomed in.</div>
+      <h2>Legend</h2>
+      <div id="legend" class="hint">Switch on a layer to see its legend.</div>
+    </section>
+
+    <!-- DATA -->
+    <section class="pane" id="pane-data">
+      <h2>Saving</h2>
+      <p class="hint" style="font-size:13px">Properties are saved automatically in this browser. To move them to another computer or share them, export a file and import it there.</p>
+      <div class="acts">
+        <button class="btn" id="expjson">Export properties (.json)</button>
+        <button class="btn sec" id="impbtn">Import .json</button>
+        <input type="file" id="impfile" accept=".json,application/json" hidden>
+      </div>
+      <h2>Export for other software</h2>
+      <div class="acts">
+        <button class="btn sec" id="expkml">Google Earth (.kml)</button>
+        <button class="btn sec" id="expgeo">GIS (.geojson)</button>
+        <button class="btn sec" id="expcsv">Area table (.csv)</button>
+        <button class="btn sec" id="printbtn">Print map</button>
+      </div>
+      <h2>Clear</h2>
+      <button class="btn sec" id="clearall">Remove all properties</button>
+      <h2>Data sources</h2>
+      <p class="hint">QLD: Department of Resources DCDB cadastre; Vegetation management (regulated vegetation, essential habitat, wetlands, watercourses, PMAV); Regional ecosystem mapping; Land types of Queensland. NSW: Spatial Services NSW cadastre; State Vegetation Type Map (extant plant community types); Land and Soil Capability v4 (DCCEEW). Information is indicative only; check official sources (QLD Globe, SIX Maps, vegetation management reports) before relying on it.</p>
+    </section>
+  </aside>
+  <div id="map"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- LAWD palette ---------- */
+const PALETTE = [
+  {name:'LAWD Blue', hex:'#009FDF'}, {name:'Table Header', hex:'#00213F'}, {name:'Table Blue Subheader', hex:'#B4D7EB'},
+  {name:'Grey 1', hex:'#767171'}, {name:'Grey 2', hex:'#999999'}, {name:'Green', hex:'#70AD47'},
+  {name:'Orange', hex:'#ED7D31'}, {name:'Yellow', hex:'#FFC000'}, {name:'Quotes Purple', hex:'#A23F97'}, {name:'Sales Red', hex:'#FF0000'}
+];
+const CATEGORIES = [
+  {id:'subject', name:'Subject',  hex:'#009FDF'},
+  {id:'quote',   name:'Quote',    hex:'#A23F97'},
+  {id:'sale',    name:'Sale',     hex:'#FF0000'},
+  {id:'forsale', name:'For Sale', hex:'#ED7D31'},
+  {id:'other',   name:'Other',    hex:'#70AD47'}
+];
+
+/* ---------- Services ---------- */
+const QLD_CAD = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/PlanningCadastre/LandParcelPropertyFramework/MapServer';
+const NSW_CAD = 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Cadastre/MapServer';
+const QLD_VM  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Biota/VegetationManagement/MapServer';
+const QLD_RE  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Biota/RegionalEcosystemMapping/MapServer';
+const QLD_LT  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Environment/LandTypes/MapServer';
+const NSW_LSC = 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/LandCap/LandAndSoilCapability_EDP/MapServer';
+const NSW_PCT = 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/VIS/SVTM_NSW_Extant_PCT/MapServer';
+
+const OVERLAYS = [
+  {id:'qrvm', st:'QLD', name:'Regulated vegetation (RVM categories)', url:QLD_VM, layers:[101], op:.6, report:true},
+  {id:'qvmre',st:'QLD', name:'Vegetation management RE map', url:QLD_VM, layers:[120], op:.6, report:true},
+  {id:'qeh',  st:'QLD', name:'Essential habitat', url:QLD_VM, layers:[5], op:.6, report:true},
+  {id:'qwet', st:'QLD', name:'Vegetation management wetlands', url:QLD_VM, layers:[4], op:.7, report:true},
+  {id:'qwc',  st:'QLD', name:'Watercourses & drainage features', url:QLD_VM, layers:[6], op:.8, report:true},
+  {id:'qpmav',st:'QLD', name:'Property map of assessable vegetation (PMAV)', url:QLD_VM, layers:[140], op:.6, report:true},
+  {id:'qscl', st:'QLD', name:'Strategic cropping land trigger map', url:QLD_VM, layers:[3], op:.6, report:true},
+  {id:'qre',  st:'QLD', name:'Regional ecosystems (biodiversity status)', url:QLD_RE, layers:[0], op:.6, report:true},
+  {id:'qbvg', st:'QLD', name:'Broad vegetation groups', url:QLD_RE, layers:[5], op:.6, report:false},
+  {id:'qhvr', st:'QLD', name:'High value regrowth', url:QLD_RE, layers:[13], op:.6, report:false},
+  {id:'qlt',  st:'QLD', name:'Land types', url:QLD_LT, layers:[1,0], op:.6, report:true, reportLayers:[1]},
+  {id:'qcad', st:'QLD', name:'Cadastre (lot boundaries)', url:QLD_CAD, layers:[4], op:1, report:false},
+  {id:'npct', st:'NSW', name:'State Vegetation Type Map (plant community types)', url:NSW_PCT, layers:null, op:.6, report:true},
+  {id:'nlsc', st:'NSW', name:'Land and soil capability (class 1-8)', url:NSW_LSC, layers:[2,1], op:.55, report:true, reportLayers:[1], valueField:'LSC_MstLmt', valuePrefix:'LSC class '},
+  {id:'ncad', st:'NSW', name:'Cadastre (lot boundaries)', url:NSW_CAD, layers:null, op:1, report:false}
+];
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const el = (tag, props, ...kids) => { const e = document.createElement(tag); if (props) for (const k in props){ if(k==='style') e.style.cssText=props[k]; else if(k.startsWith('on')) e.addEventListener(k.slice(2), props[k]); else if(k in e) e[k]=props[k]; else e.setAttribute(k, props[k]); } kids.flat().forEach(k=>{ if(k==null) return; e.append(k.nodeType?k:document.createTextNode(String(k))); }); return e; };
+let toastT;
+function toast(msg, err){ const t=$('#toast'); t.textContent=msg; t.className=err?'err':''; t.style.display='block'; clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none', err?7000:3500); }
+const fmt = (n,d=2)=> Number(n).toLocaleString('en-AU',{minimumFractionDigits:d,maximumFractionDigits:d});
+const uid = ()=> Math.random().toString(36).slice(2,10);
+function store(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function load(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }
+
+async function getJSON(url, params, post){
+  const body = new URLSearchParams(Object.assign({f:'json'}, params));
+  const r = post ? await fetch(url, {method:'POST', body}) : await fetch(url + '?' + body.toString());
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  if(j.error) throw new Error(j.error.message || 'Service error');
+  return j;
+}
+
+/* ---------- geometry ---------- */
+function ringSigned(r){ let a=0; for(let i=0,n=r.length;i<n;i++){ const [x1,y1]=r[i], [x2,y2]=r[(i+1)%n]; a+=x1*y2-x2*y1; } return a/2; }
+function esriToGeo(g){
+  const polys=[];
+  (g.rings||[]).forEach(r=>{ if(ringSigned(r)<0 || !polys.length) polys.push([r]); else polys[polys.length-1].push(r); });
+  return polys.length===1 ? {type:'Polygon',coordinates:polys[0]} : {type:'MultiPolygon',coordinates:polys};
+}
+function geoToEsriRings(geo){
+  const polys = geo.type==='Polygon' ? [geo.coordinates] : geo.coordinates;
+  const rings=[]; polys.forEach(p=>p.forEach((r,i)=>{ const s=ringSigned(r); const cw = i===0; rings.push((cw ? s>0 : s<0) ? r.slice().reverse() : r); }));
+  return rings;
+}
+const R=6378137, rad=d=>d*Math.PI/180;
+function ringArea(c){ let a=0; const n=c.length; if(n<3) return 0; for(let i=0;i<n;i++){ const p1=c[i], p2=c[(i+1)%n]; a+=rad(p2[0]-p1[0])*(2+Math.sin(rad(p1[1]))+Math.sin(rad(p2[1]))); } return Math.abs(a*R*R/2); }
+function geoArea(g){ const polys = g.type==='Polygon'?[g.coordinates]:g.coordinates; let a=0; polys.forEach(p=>p.forEach((r,i)=>{ a += i===0 ? ringArea(r) : -ringArea(r); })); return a; }
+function geoBounds(geos){ let b=null; geos.forEach(g=>{ const l=L.geoJSON(g).getBounds(); b = b? b.extend(l) : l; }); return b; }
+
+/* ---------- lot/plan parsing ---------- */
+const NSW_ONLY = ['DP'];
+const QLD_ONLY = ['RP','BUP','GTP','AP','CROWN','CSH','MPH','SL','USL','NPW','FTY','AB','AG','B','CC','CG','CH','CK','CO','CP','CSA','CSB','D','E','FY','G','GV','K','LG','MM','NO','NR','PER','RL','S','SB','SR','SV','TP','WD','W'];
+function parseLot(raw){
+  let s = raw.toUpperCase().replace(/[.,]/g,' ').replace(/\bLOTS?\b/g,' ').replace(/\bON\b/g,' ').replace(/\bPLAN\b/g,' ').replace(/\s+/g,' ').trim();
+  if(!s) return null;
+  const m = s.match(/([A-Z]{1,5})\s*(\d+)\s*$/);
+  if(!m) return {raw, error:'Could not find a plan number (e.g. RP123456, SP123456, DP123456)'};
+  const prefix=m[1], planNo=m[2], plan=prefix+planNo;
+  let rest = s.slice(0, m.index).trim().replace(/\/+$/,'').trim();
+  let section='';
+  const sec = rest.match(/\b(?:SEC|SECTION)\s*([A-Z0-9]+)/);
+  if(sec){ section=sec[1]; rest=rest.replace(sec[0],' ').trim(); }
+  let parts = rest.split(/[\/\s]+/).filter(Boolean);
+  let lot = parts[0]||'';
+  if(!section && parts.length>1) section = parts[1];
+  if(!lot) return {raw, error:'Missing lot number'};
+  return {raw, lot, section, prefix, plan};
+}
+function guessStates(p, pref){
+  if(pref==='QLD'||pref==='NSW') return [pref];
+  if(NSW_ONLY.includes(p.prefix) || p.section) return ['NSW','QLD'];
+  return ['QLD','NSW'];
+}
+
+async function queryQLD(p){
+  const lotplan = p.lot + p.plan;
+  const base = {outFields:'*', returnGeometry:true, outSR:4326};
+  let j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`lotplan='${lotplan.replace(/'/g,"''")}'`}, base));
+  if(!j.features || !j.features.length) j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`lot='${p.lot.replace(/'/g,"''")}' AND plan='${p.plan.replace(/'/g,"''")}'`}, base)).catch(()=>({features:[]}));
+  if(!j.features || !j.features.length) return null;
+  return j.features.map(f=>{
+    const a=f.attributes||{}; const geo=esriToGeo(f.geometry);
+    const title = a.lot_area!=null ? Number(a.lot_area) : (a.LOT_AREA!=null?Number(a.LOT_AREA):null);
+    return {state:'QLD', id:(a.lotplan||lotplan), lot:p.lot, plan:p.plan, geo, calcArea:geoArea(geo), titleArea:title, attrs:{
+      Locality:a.locality, 'Local government':a.shire_name||a.lga, Tenure:a.tenure, 'Parcel type':a.parcel_typ, Parish:a.parish, County:a.county
+    }};
+  });
+}
+async function queryNSW(p){
+  const ids = p.section ? [`${p.lot}/${p.section}/${p.plan}`] : [`${p.lot}//${p.plan}`, `${p.lot}/${p.plan}`];
+  const esc = s=>String(s).replace(/'/g,"''");
+  const base = {outFields:'*', returnGeometry:true, outSR:4326};
+  const planNo = parseInt(p.plan.replace(/^[A-Z]+/,''),10);
+  let feats = [];
+  try{
+    let where = `plannumber=${planNo} AND lotnumber='${esc(p.lot)}'` + (p.section?` AND sectionnumber='${esc(p.section)}'`:'');
+    const j1 = await getJSON(NSW_CAD+'/9/query', Object.assign({where}, base));
+    feats = (j1.features||[]).filter(f=>{ const a=f.attributes||{}; const lbl=String(a.planlabel||a.lotidstring||'').toUpperCase(); return !lbl || lbl.includes(p.prefix); });
+    if(!p.section && feats.length>1){ const noSec = feats.filter(f=>!(f.attributes||{}).sectionnumber); if(noSec.length) feats=noSec; }
+  }catch(e){ console.warn('NSW plannumber query failed', e); }
+  if(!feats.length){
+    const where = 'lotidstring IN (' + ids.map(i=>`'${esc(i)}'`).join(',') + ')';
+    const j = await getJSON(NSW_CAD+'/9/query', Object.assign({where}, base));
+    feats = j.features||[];
+  }
+  if(!feats.length) return null;
+  const j = {features:feats};
+  return j.features.map(f=>{
+    const a=f.attributes||{}; const geo=esriToGeo(f.geometry);
+    let title=null; if(a.planlotarea){ const u=String(a.planlotareaunits||'').toLowerCase(); title = Number(a.planlotarea) * (u.startsWith('h')?10000 : u.startsWith('a')&&u!=='ar'?4046.8564224 : 1); }
+    return {state:'NSW', id:a.lotidstring||ids[0], lot:p.lot, plan:p.plan, geo, calcArea:geoArea(geo), titleArea:title, attrs:{
+      'Plan label':a.planlabel, 'Lot number':a.lotnumber, Section:a.sectionnumber, Urbanity:a.urbanity, 'Plan area':a.planlotarea? a.planlotarea+' '+(a.planlotareaunits||''):null
+    }};
+  });
+}
+
+/* ---------- state ---------- */
+const KEY='lawd-property-mapper-v1';
+let props = load(KEY, []);
+let selCat = 'subject', selCol = CATEGORIES[0].hex;
+const save = ()=> store(KEY, props);
+
+/* ---------- map ---------- */
+const map = L.map('map', {zoomControl:true, preferCanvas:false}).setView([-25.5, 147.5], 5);
+const BASES = {
+  'Satellite imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:20, maxNativeZoom:19, attribution:'Imagery &copy; Esri, Maxar, Earthstar'}),
+  'NSW imagery (SIX Maps)': L.tileLayer('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:21, attribution:'&copy; NSW Spatial Services'}),
+  'Topographic': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'&copy; Esri'}),
+  'Street map': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'})
+};
+const LABELS = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom:20, maxNativeZoom:19, pane:'overlayPane'});
+let baseName = load(KEY+'-base','Satellite imagery'); if(!BASES[baseName]) baseName='Satellite imagery';
+BASES[baseName].addTo(map); LABELS.addTo(map);
+map.createPane('props'); map.getPane('props').style.zIndex = 450;
+
+const ovState = load(KEY+'-ovl', {});
+const ovLayers = {};
+function makeOverlay(o){
+  const opts = {url:o.url, opacity:(ovState[o.id]&&ovState[o.id].op)||o.op, f:'image', format:'png32'};
+  if(o.layers) opts.layers=o.layers;
+  return L.esri.dynamicMapLayer(opts);
+}
+
+const propGroup = L.featureGroup().addTo(map);
+const propLayers = {};
+
+function drawProp(p){
+  if(propLayers[p.id]) propGroup.removeLayer(propLayers[p.id]);
+  const fc = {type:'FeatureCollection', features:p.lots.map(l=>({type:'Feature', geometry:l.geo, properties:{id:l.id}}))};
+  const lyr = L.geoJSON(fc, {pane:'props', style:{color:p.color, weight:3, fillColor:p.color, fillOpacity:p.fill??0.25},
+    onEachFeature:(f,l)=>{ l.on('click', e=>{ L.DomEvent.stopPropagation(e); openProp(p.id, true); showPropPopup(p, e.latlng); }); }});
+  if(p.lots.length){ lyr.bindTooltip(p.name, {permanent:true, direction:'center', className:'plabel'}); }
+  propLayers[p.id]=lyr; propGroup.addLayer(lyr);
+}
+function showPropPopup(p, latlng){
+  const c = el('div',null, el('b',null,p.name), el('br'), (catById(p.cat)||{}).name||'', el('br'),
+    `${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)`, el('br'), `${p.lots.length} lot(s): ${p.lots.map(l=>l.id).join(', ')}`);
+  L.popup().setLatLng(latlng).setContent(c).openOn(map);
+}
+const catById = id => CATEGORIES.find(c=>c.id===id);
+
+/* ---------- UI: pickers ---------- */
+function renderPickers(){
+  const cp=$('#catpick'); cp.replaceChildren(...CATEGORIES.map(c=> el('div',{className:'cat'+(c.id===selCat?' on':''), onclick:()=>{ selCat=c.id; selCol=c.hex; renderPickers(); }}, el('span',{className:'dot',style:`background:${c.hex}`}), c.name)));
+  const sp=$('#colpick'); sp.replaceChildren(...PALETTE.map(c=> el('button',{type:'button',className:'sw'+(c.hex===selCol?' on':''), title:`${c.name} ${c.hex}`, style:`background:${c.hex}`, onclick:()=>{ selCol=c.hex; renderPickers(); }})));
+}
+
+/* ---------- UI: property list ---------- */
+let openId=null;
+function openProp(id, scroll){ openId = id; renderList(); if(scroll){ const n=document.querySelector(`[data-pid="${id}"]`); if(n) n.scrollIntoView({block:'nearest'}); switchTab('props'); } }
+function renderList(){
+  const list=$('#plist');
+  $('#pcount').textContent = props.length?`(${props.length})`:'';
+  if(!props.length){ list.replaceChildren(el('div',{className:'empty'},'No properties yet. Enter lot/plan numbers above to map your first property.')); $('#totals').textContent=''; return; }
+  list.replaceChildren(...props.map(p=>{
+    const cat=catById(p.cat);
+    const swatches = el('div',{className:'swatches'}, PALETTE.map(c=> el('button',{type:'button',className:'sw'+(c.hex===p.color?' on':''),title:c.name+' '+c.hex,style:`background:${c.hex}`,onclick:()=>{ p.color=c.hex; save(); drawProp(p); renderList(); }})));
+    const catSel = el('select',{onchange:e=>{ p.cat=e.target.value; const c=catById(p.cat); if(c) p.color=c.hex; save(); drawProp(p); renderList(); }}, CATEGORIES.map(c=> el('option',{value:c.id, selected:c.id===p.cat}, c.name)));
+    const fillR = el('input',{type:'range',min:0,max:0.8,step:0.05,value:p.fill??0.25, oninput:e=>{ p.fill=+e.target.value; drawProp(p); }, onchange:()=>save()});
+    const lotRows = p.lots.map(l=> el('tr',null, el('td',null,l.state), el('td',null,l.id), el('td',{style:'text-align:right'},fmt(l.calcArea/10000)), el('td',{style:'text-align:right'}, l.titleArea?fmt(l.titleArea/10000):'–'),
+      el('td',null, el('button',{className:'btn sec small',title:'Remove this lot',onclick:()=>{ if(!confirmSafe(`Remove lot ${l.id} from ${p.name}?`)) return; p.lots=p.lots.filter(x=>x!==l); recalc(p); save(); drawProp(p); renderList(); }},'✕'))));
+    const attrsRows = [];
+    p.lots.forEach(l=>{ const a=Object.entries(l.attrs||{}).filter(([k,v])=>v!=null && v!==''); if(a.length){ attrsRows.push(el('tr',{className:'subh'}, el('td',{colSpan:2}, l.id))); a.forEach(([k,v])=>attrsRows.push(el('tr',null, el('td',null,k), el('td',null,String(v))))); } });
+    const addIn = el('input',{type:'text',placeholder:'Add lot e.g. 4RP123456'});
+    const body = el('div',{className:'body'},
+      el('div',{className:'row'}, el('div',null, el('label',null,'Name'), el('input',{type:'text',value:p.name,onchange:e=>{ p.name=e.target.value||p.name; save(); drawProp(p); renderList(); }})), el('div',null, el('label',null,'Category'), catSel)),
+      el('label',null,'Colour'), swatches,
+      el('label',null,'Fill strength'), fillR,
+      el('table',{className:'tbl'}, el('thead',null, el('tr',null, el('th',null,'State'), el('th',null,'Lot/plan'), el('th',{style:'text-align:right'},'Calc. ha'), el('th',{style:'text-align:right'},'Title ha'), el('th',null,''))), el('tbody',null, lotRows,
+        el('tr',{className:'subh'}, el('td',{colSpan:2},'Total'), el('td',{style:'text-align:right'},fmt(p.area/10000)), el('td',{style:'text-align:right'}, p.titleArea?fmt(p.titleArea/10000):'–'), el('td')))),
+      el('div',{className:'hint'}, `${fmt(p.area/10000)} ha = ${fmt(p.area/4046.8564224)} acres = ${fmt(p.area/1e6,3)} km². Calc. area is measured from the boundary; title area is the surveyed area recorded on the cadastre.`),
+      el('div',{className:'row',style:'margin-top:8px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, v.split(/[\n,;]+/), 'auto'); e.target.disabled=false; }},'Add lot')),
+      el('div',{className:'acts'},
+        el('button',{className:'btn small',onclick:()=>zoomTo(p)},'Zoom to'),
+        el('button',{className:'btn sec small',onclick:()=>download(`${safeName(p.name)}.kml`, buildKML([p], p.name),'application/vnd.google-earth.kml+xml')},'Google Earth (.kml)'),
+        el('button',{className:'btn small',onclick:e=>runReport(p, e.target.closest('.body').querySelector('.report'))},'Vegetation & land type report'),
+        el('button',{className:'btn sec small',onclick:()=>{ if(!confirmSafe(`Delete ${p.name}?`)) return; props=props.filter(x=>x!==p); if(propLayers[p.id]) propGroup.removeLayer(propLayers[p.id]); delete propLayers[p.id]; save(); renderList(); }},'Delete')),
+      el('div',{className:'report'}, p.report? renderReport(p.report):null),
+      attrsRows.length? el('details',{style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--navy)'},'Parcel details'), el('table',{className:'tbl'}, el('tbody',null, attrsRows))) : null
+    );
+    return el('div',{className:'prop'+(openId===p.id?' open':''),'data-pid':p.id},
+      el('div',{className:'top',onclick:()=>{ openId = openId===p.id?null:p.id; renderList(); if(openId) zoomTo(p); }},
+        el('span',{className:'dot',style:`background:${p.color}`}),
+        el('div',{style:'flex:1;min-width:0'}, el('div',{className:'nm'},p.name), el('div',{className:'meta'}, `${cat?cat.name:''} · ${p.lots.length} lot${p.lots.length===1?'':'s'} · ${[...new Set(p.lots.map(l=>l.state))].join('/')}`)),
+        el('div',{className:'area'}, `${fmt(p.area/10000)} ha`, el('div',{className:'meta',style:'font-weight:400'}, `${fmt(p.area/4046.8564224,0)} ac`))),
+      body);
+  }));
+  const tot = props.reduce((s,p)=>s+p.area,0);
+  const byCat = CATEGORIES.map(c=>{ const ps=props.filter(p=>p.cat===c.id); return ps.length? `${c.name}: ${ps.length} (${fmt(ps.reduce((s,p)=>s+p.area,0)/10000,0)} ha)`:null; }).filter(Boolean);
+  $('#totals').textContent = `All properties: ${fmt(tot/10000)} ha. ` + byCat.join(' · ');
+}
+function confirmSafe(msg){ try{ return window.confirm(msg); }catch(e){ return true; } }
+function recalc(p){ p.area = p.lots.reduce((s,l)=>s+l.calcArea,0); const t=p.lots.every(l=>l.titleArea)? p.lots.reduce((s,l)=>s+l.titleArea,0):null; p.titleArea=t; p.report=null; }
+function zoomTo(p){ if(!p.lots.length) return; map.fitBounds(geoBounds(p.lots.map(l=>l.geo)), {padding:[40,40], maxZoom:17}); }
+
+/* ---------- add property ---------- */
+async function lookup(raw, pref){
+  const p = parseLot(raw); if(!p) return {skip:true};
+  if(p.error) return {raw, error:p.error};
+  for(const st of guessStates(p, pref)){
+    try{ const r = st==='QLD' ? await queryQLD(p) : await queryNSW(p); if(r && r.length) return {raw, lots:r}; }
+    catch(e){ console.warn(st, e); if(pref===st) return {raw, error:`${st} cadastre lookup failed (${e.message})`}; }
+  }
+  return {raw, error:'Not found in '+guessStates(p,pref).join(' or ')+' cadastre'};
+}
+async function addLotsTo(prop, raws, pref){
+  const res = await Promise.all(raws.map(r=>r.trim()).filter(Boolean).map(r=>lookup(r, pref)));
+  const errs=[]; let added=0;
+  res.forEach(r=>{ if(r.skip) return; if(r.error) errs.push(`${r.raw}: ${r.error}`); else r.lots.forEach(l=>{ if(!prop.lots.some(x=>x.id===l.id && x.state===l.state)){ prop.lots.push(l); added++; } }); });
+  if(added){ recalc(prop); save(); drawProp(prop); renderList(); zoomTo(prop); }
+  if(errs.length) toast(errs.join(' | '), true); else if(added) toast(`Added ${added} lot${added===1?'':'s'} to ${prop.name}`);
+  return added;
+}
+$('#addbtn').addEventListener('click', async ()=>{
+  const raws = $('#plots').value.split(/[\n,;]+/).filter(s=>s.trim());
+  if(!raws.length){ toast('Enter at least one lot/plan number', true); return; }
+  const btn=$('#addbtn'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Looking up…');
+  const p = {id:uid(), name:$('#pname').value.trim() || ('Property '+(props.length+1)), cat:selCat, color:selCol, fill:0.25, lots:[], area:0, created:Date.now()};
+  try{
+    const n = await addLotsTo(p, raws, $('#pstate').value);
+    if(n){ props.push(p); save(); drawProp(p); openId=p.id; renderList(); $('#plots').value=''; $('#pname').value=''; }
+  } finally { btn.disabled=false; btn.textContent='Find & map property'; }
+});
+
+/* ---------- reports (veg + land types inside the boundary) ---------- */
+async function identifyPolygon(url, layerIds, rings){
+  const b = L.geoJSON({type:'Polygon',coordinates:rings}).getBounds();
+  const params = {geometry:JSON.stringify({rings, spatialReference:{wkid:4326}}), geometryType:'esriGeometryPolygon', sr:4326,
+    layers: layerIds? 'all:'+layerIds.join(',') : 'all', tolerance:0, returnGeometry:false,
+    mapExtent:[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(','), imageDisplay:'800,600,96'};
+  return getJSON(url+'/identify', params, true);
+}
+async function identifyPoint(url, layerIds, latlng){
+  const b = map.getBounds(), s = map.getSize();
+  const params = {geometry:`${latlng.lng},${latlng.lat}`, geometryType:'esriGeometryPoint', sr:4326,
+    layers: layerIds? 'all:'+layerIds.join(',') : 'all', tolerance:3, returnGeometry:false,
+    mapExtent:[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(','), imageDisplay:`${s.x},${s.y},96`};
+  return getJSON(url+'/identify', params);
+}
+const SKIP_ATTR = /^(objectid|shape|shape_|shape\.|st_area|st_length|fid|globalid|oid|area_ha|perim)/i;
+function summariseResult(r, o){
+  const a = r.attributes||{};
+  if(o && o.valueField && a[o.valueField]!=null && a[o.valueField]!=='Null') return (o.valuePrefix||'')+a[o.valueField];
+  let v = r.value;
+  if(v==null || v==='' || v==='Null'){
+    const k = Object.keys(a).find(k=>!SKIP_ATTR.test(k) && a[k]!=null && a[k]!=='Null' && a[k]!=='');
+    v = k? a[k] : '';
+  }
+  return String(v);
+}
+async function runReport(p, box){
+  if(!p.lots.length) return;
+  box.replaceChildren(el('div',{className:'hint'}, el('span',{className:'spin'}),' Checking vegetation and land type layers inside the boundary…'));
+  const states=[...new Set(p.lots.map(l=>l.state))];
+  const srcs = OVERLAYS.filter(o=>o.report && states.includes(o.st));
+  const sections=[];
+  for(const o of srcs){
+    const counts = new Map(); let err=null;
+    for(const l of p.lots){
+      const polys = l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates;
+      for(const poly of polys){
+        try{
+          const j = await identifyPolygon(o.url, o.reportLayers||o.layers, geoToEsriRings({type:'Polygon',coordinates:poly}));
+          (j.results||[]).forEach(r=>{ const k=(r.layerName||'')+'||'+summariseResult(r,o); counts.set(k,(counts.get(k)||0)+1); });
+        }catch(e){ err=e.message; }
+      }
+    }
+    sections.push({name:o.name, st:o.st, err, items:[...counts.entries()].map(([k,n])=>{ const [layer,val]=k.split('||'); return {layer,val,n}; })});
+  }
+  p.report = {at:Date.now(), sections}; save();
+  box.replaceChildren(renderReport(p.report));
+}
+function renderReport(rep){
+  const rows=[];
+  rep.sections.forEach(s=>{
+    rows.push(el('tr',{className:'subh'}, el('td',{colSpan:2}, `${s.st} · ${s.name}`)));
+    if(s.err && !s.items.length) rows.push(el('tr',null, el('td',{colSpan:2,style:'color:#b00020'}, 'Could not read this layer: '+s.err)));
+    else if(!s.items.length) rows.push(el('tr',null, el('td',{colSpan:2,style:'color:var(--muted)'}, 'None mapped inside the boundary')));
+    else s.items.sort((a,b)=>a.layer.localeCompare(b.layer)).forEach(i=> rows.push(el('tr',null, el('td',null,i.layer), el('td',null,i.val || '(mapped)'))));
+  });
+  return el('div',null, el('table',{className:'tbl'}, el('thead',null, el('tr',null, el('th',null,'Layer'), el('th',null,'Found inside property'))), el('tbody',null, rows)),
+    el('div',{className:'hint'}, 'Checked '+new Date(rep.at).toLocaleString('en-AU')+'. Lists what each layer shows within the boundary; not an official vegetation management report.'));
+}
+
+/* ---------- click identify ---------- */
+map.on('click', async e=>{
+  const active = OVERLAYS.filter(o=>ovLayers[o.id] && map.hasLayer(ovLayers[o.id]) && !/cad$/.test(o.id));
+  if(!active.length) return;
+  const pop = L.popup().setLatLng(e.latlng).setContent('<span class="spin"></span> Identifying…').openOn(map);
+  const out = el('div');
+  for(const o of active){
+    try{
+      const j = await identifyPoint(o.url, o.reportLayers||o.layers, e.latlng);
+      const res = (j.results||[]);
+      out.append(el('div',{style:'margin-bottom:6px'}, el('b',null,o.name), res.length? res.slice(0,8).map(r=> el('div',null, (r.layerName?r.layerName+': ':'') + summariseResult(r,o))) : el('div',{style:'color:#777'},'Nothing mapped here')));
+    }catch(err){ out.append(el('div',null, el('b',null,o.name), el('div',{style:'color:#b00020'}, err.message))); }
+  }
+  pop.setContent(out);
+});
+
+/* ---------- layers tab ---------- */
+function renderLayersTab(){
+  $('#baselist').replaceChildren(...Object.keys(BASES).map(n=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:n===baseName,onchange:()=>{ map.removeLayer(BASES[baseName]); baseName=n; BASES[n].addTo(map); BASES[n].bringToBack(); store(KEY+'-base',n); }}), el('span',null,n))));
+  ['QLD','NSW'].forEach(st=>{
+    $('#ovl-'+st).replaceChildren(...OVERLAYS.filter(o=>o.st===st).map(o=>{
+      const s = ovState[o.id] || (ovState[o.id]={on:false, op:o.op});
+      const cb = el('input',{type:'checkbox',checked:!!s.on,onchange:e=>{ s.on=e.target.checked; applyOverlay(o); store(KEY+'-ovl',ovState); renderLegend(); }});
+      const rg = el('input',{type:'range',min:0.1,max:1,step:0.05,value:s.op,title:'Transparency',oninput:e=>{ s.op=+e.target.value; if(ovLayers[o.id]) ovLayers[o.id].setOpacity(s.op); }, onchange:()=>store(KEY+'-ovl',ovState)});
+      return el('div',{className:'lyr'}, cb, el('span',null,o.name), rg);
+    }));
+  });
+  OVERLAYS.forEach(applyOverlay);
+}
+function applyOverlay(o){
+  const s=ovState[o.id]; if(!s) return;
+  if(s.on){ if(!ovLayers[o.id]) ovLayers[o.id]=makeOverlay(o); ovLayers[o.id].setOpacity(s.op); if(!map.hasLayer(ovLayers[o.id])) ovLayers[o.id].addTo(map); }
+  else if(ovLayers[o.id] && map.hasLayer(ovLayers[o.id])) map.removeLayer(ovLayers[o.id]);
+}
+const legendCache={};
+async function renderLegend(){
+  const box=$('#legend'); const on=OVERLAYS.filter(o=>ovState[o.id]&&ovState[o.id].on&&!/cad$/.test(o.id));
+  if(!on.length){ box.textContent='Switch on a layer to see its legend.'; return; }
+  box.replaceChildren(el('span',{className:'spin'}));
+  const parts=[];
+  for(const o of on){
+    try{
+      if(!legendCache[o.url]) legendCache[o.url]=await getJSON(o.url+'/legend',{});
+      const want = o.layers;
+      // include children of group layers by name match is unknown; show all legend entries whose layerId is listed or (if group) the next few ids
+      let ls = legendCache[o.url].layers||[];
+      if(want) ls = ls.filter(l=> want.includes(l.layerId) || want.some(w=> w>=100 ? (l.layerId>w && l.layerId<w+10) : (w===0&&o.url===QLD_RE ? l.layerId<5 : w===5&&o.url===QLD_RE? (l.layerId>5&&l.layerId<12) : w===6&&o.url===QLD_VM ? (l.layerId===7||l.layerId===8) : false)));
+      const block=el('div',{style:'margin-bottom:10px'}, el('div',{style:'font-weight:600;color:var(--navy);margin:6px 0 4px'}, o.name));
+      ls.slice(0,8).forEach(l=>{ if(ls.length>1) block.append(el('div',{style:'font-size:11px;color:var(--muted);margin-top:4px'}, l.layerName)); (l.legend||[]).slice(0,25).forEach(i=> block.append(el('div',{style:'display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text)'}, el('img',{src:`data:${i.contentType};base64,${i.imageData}`,width:18,height:18,alt:''}), i.label||l.layerName))); });
+      parts.push(block);
+    }catch(e){ parts.push(el('div',null, o.name+': legend unavailable')); }
+  }
+  box.replaceChildren(...parts);
+}
+
+/* ---------- tabs ---------- */
+function switchTab(t){ document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+t)); }
+document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+
+/* ---------- export / import ---------- */
+function download(name, text, type){ const a=el('a',{href:URL.createObjectURL(new Blob([text],{type})),download:name}); document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); }
+const stamp=()=>new Date().toISOString().slice(0,10);
+$('#expjson').onclick=()=> download(`lawd-properties-${stamp()}.json`, JSON.stringify({app:'lawd-property-mapper',version:1,properties:props},null,1),'application/json');
+$('#impbtn').onclick=()=> $('#impfile').click();
+$('#impfile').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{ const j=JSON.parse(await f.text()); const arr=Array.isArray(j)?j:j.properties; if(!Array.isArray(arr)) throw new Error('Not a property file');
+    let n=0; arr.forEach(p=>{ if(!p||!Array.isArray(p.lots)) return; p.id = props.some(x=>x.id===p.id)? uid() : (p.id||uid()); props.push(p); drawProp(p); n++; });
+    save(); renderList(); toast(`Imported ${n} propert${n===1?'y':'ies'}`); if(props.length) map.fitBounds(propGroup.getBounds(),{padding:[30,30]});
+  }catch(err){ toast('Import failed: '+err.message, true); }
+  e.target.value='';
+};
+function geojsonAll(){ return {type:'FeatureCollection', features: props.flatMap(p=> p.lots.map(l=>({type:'Feature', geometry:l.geo, properties:{property:p.name, category:(catById(p.cat)||{}).name, colour:p.color, state:l.state, lotplan:l.id, calc_area_ha:+(l.calcArea/10000).toFixed(4), title_area_ha:l.titleArea?+(l.titleArea/10000).toFixed(4):null}})))}; }
+$('#expgeo').onclick=()=> download(`lawd-properties-${stamp()}.geojson`, JSON.stringify(geojsonAll()),'application/geo+json');
+$('#expcsv').onclick=()=>{
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=[['Property','Category','State','Lot/plan','Calculated area (ha)','Title area (ha)','Calculated area (ac)']];
+  props.forEach(p=>p.lots.forEach(l=>rows.push([p.name,(catById(p.cat)||{}).name,l.state,l.id,(l.calcArea/10000).toFixed(4),l.titleArea?(l.titleArea/10000).toFixed(4):'',(l.calcArea/4046.8564224).toFixed(2)])));
+  download(`lawd-property-areas-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
+};
+function buildKML(list, title){
+  const x=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const kcol=(hex,a)=>{ const h=hex.replace('#',''); return a+h.slice(4,6)+h.slice(2,4)+h.slice(0,2); };
+  const ring=r=>`<LinearRing><tessellate>1</tessellate><coordinates>${r.map(c=>c[0]+','+c[1]+',0').join(' ')}</coordinates></LinearRing>`;
+  const poly=pc=>`<Polygon><tessellate>1</tessellate><outerBoundaryIs>${ring(pc[0])}</outerBoundaryIs>${pc.slice(1).map(h=>`<innerBoundaryIs>${ring(h)}</innerBoundaryIs>`).join('')}</Polygon>`;
+  const styles = [...new Set(list.map(p=>p.color))].map(c=>`<Style id="c${c.slice(1)}"><LineStyle><color>${kcol(c,'ff')}</color><width>3</width></LineStyle><PolyStyle><color>${kcol(c,'59')}</color></PolyStyle><LabelStyle><scale>0</scale></LabelStyle></Style><Style id="l${c.slice(1)}"><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle></Style>`).join('');
+  const desc = p=>{ const cat=(catById(p.cat)||{}).name||'';
+    return `<![CDATA[<table style="font-family:Arial;font-size:12px;border-collapse:collapse"><tr><td colspan="2" style="background:#00213F;color:#fff;padding:4px 6px;font-weight:bold">${x(p.name)}</td></tr><tr><td style="padding:3px 6px">Category</td><td>${x(cat)}</td></tr><tr><td style="padding:3px 6px">Area</td><td>${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)</td></tr>${p.titleArea?`<tr><td style="padding:3px 6px">Title area</td><td>${fmt(p.titleArea/10000)} ha</td></tr>`:''}<tr><td style="padding:3px 6px;background:#B4D7EB" colspan="2">Lots</td></tr>${p.lots.map(l=>`<tr><td style="padding:3px 6px">${x(l.state)} ${x(l.id)}</td><td>${fmt(l.calcArea/10000)} ha</td></tr>`).join('')}</table>]]>`; };
+  const folders = list.map(p=>{ if(!p.lots.length) return '';
+    const c = geoBounds(p.lots.map(l=>l.geo)).getCenter();
+    const lots = p.lots.map(l=>{ const ps=l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates;
+      return `<Placemark><name>${x(l.id)}</name><description>${desc(p)}</description><styleUrl>#c${p.color.slice(1)}</styleUrl><ExtendedData><Data name="Property"><value>${x(p.name)}</value></Data><Data name="Lot/plan"><value>${x(l.id)}</value></Data><Data name="Area (ha)"><value>${(l.calcArea/10000).toFixed(2)}</value></Data></ExtendedData><MultiGeometry>${ps.map(poly).join('')}</MultiGeometry></Placemark>`; }).join('');
+    return `<Folder><name>${x(p.name)} (${x((catById(p.cat)||{}).name||'')})</name><open>0</open><Placemark><name>${x(p.name)}</name><description>${desc(p)}</description><styleUrl>#l${p.color.slice(1)}</styleUrl><Point><coordinates>${c.lng},${c.lat},0</coordinates></Point></Placemark>${lots}</Folder>`; }).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(title)}</name><open>1</open>${styles}${folders}</Document></kml>`;
+}
+const safeName = s=>String(s).replace(/[^A-Za-z0-9 _-]+/g,'').trim().replace(/\s+/g,'-')||'property';
+$('#expkml').onclick=()=>{ if(!props.length){ toast('No properties to export', true); return; } download(`lawd-properties-${stamp()}.kml`, buildKML(props,'LAWD properties'),'application/vnd.google-earth.kml+xml'); };
+$('#printbtn').onclick=()=> window.print();
+$('#clearall').onclick=()=>{ if(!props.length||!confirmSafe('Remove all properties from this browser? Export first if you want a copy.')) return; props=[]; propGroup.clearLayers(); for(const k in propLayers) delete propLayers[k]; save(); renderList(); };
+
+/* ---------- init ---------- */
+renderPickers(); renderLayersTab(); renderLegend();
+props.forEach(drawProp); renderList();
+if(props.length){ try{ map.fitBounds(propGroup.getBounds(),{padding:[30,30]}); }catch(e){} }
+})();
+</script>
+</body>
+</html>
