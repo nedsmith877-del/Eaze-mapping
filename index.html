@@ -538,7 +538,6 @@ const BASE_DEFS = [
   {name:'Satellite + roads & labels (Google hybrid style)', labels:true, make:()=> L.layerGroup([tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar'}), ROADS()])},
   {name:'Satellite only', labels:false, make:()=> tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar, Earthstar'})},
   {name:'Street map (Google Maps style)', labels:false, make:()=> tl(ESRI('World_Street_Map'),{attribution:'&copy; Esri, HERE, Garmin'})},
-  {name:'Light map (Google My Maps style)', labels:false, make:()=> tl('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{subdomains:'abcd', maxNativeZoom:20, attribution:'&copy; OpenStreetMap contributors &copy; CARTO'})},
   {name:'Terrain (Google terrain style)', labels:false, make:()=> tl(ESRI('World_Topo_Map'),{attribution:'&copy; Esri'})}
 ];
 const BASES = {};
