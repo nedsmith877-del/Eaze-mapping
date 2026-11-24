@@ -7,8 +7,8 @@ A browser app for mapping properties in Queensland and New South Wales from thei
 - Colour properties by category, using the LAWD palette: Subject, Quote, Sale and For Sale.
 - See land area in hectares, acres and km², both measured from the boundary and as the title area.
 - Switch on vegetation and land layers:
-  - QLD: regulated vegetation, regional ecosystems, essential habitat, wetlands, watercourses, PMAV, strategic cropping land and land types.
-  - NSW: State Vegetation Type Map and land and soil capability.
+  - QLD: regulated vegetation, regional ecosystems, essential habitat, wetlands, watercourses, PMAV, strategic cropping land, land types, land use (QLUMP), the floodplain assessment overlay and historic flood lines.
+  - NSW: State Vegetation Type Map, land and soil capability, land use (2017) and council flood planning areas.
 - Click the map to see what each layer shows at that point, or run a per-property report of what lies inside the boundary.
 - Export properties for Google Earth (KML), GIS (GeoJSON), as an area table (CSV), or as a JSON backup. Properties save in your browser automatically.
 

@@ -145,6 +145,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
       <h2>Base map</h2>
       <div id="baselist"></div>
       <h2>Queensland (QLD Globe layers)</h2>
+      <div class="hint" style="margin-top:-4px">Vegetation, land types, land use and flooding.</div>
       <div id="ovl-QLD"></div>
       <h2>New South Wales</h2>
       <div id="ovl-NSW"></div>
@@ -172,7 +173,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--lawd-blue);outli
       <h2>Clear</h2>
       <button class="btn sec" id="clearall">Remove all properties</button>
       <h2>Data sources</h2>
-      <p class="hint">QLD: Department of Resources DCDB cadastre; Vegetation management (regulated vegetation, essential habitat, wetlands, watercourses, PMAV); Regional ecosystem mapping; Land types of Queensland. NSW: Spatial Services NSW cadastre; State Vegetation Type Map (extant plant community types); Land and Soil Capability v4 (DCCEEW). Information is indicative only; check official sources (QLD Globe, SIX Maps, vegetation management reports) before relying on it.</p>
+      <p class="hint">QLD: Department of Resources DCDB cadastre; Vegetation management (regulated vegetation, essential habitat, wetlands, watercourses, PMAV); Regional ecosystem mapping; Land types of Queensland; Queensland land use (QLUMP); Floodplain assessment overlay; historic flood lines. NSW: Spatial Services NSW cadastre; State Vegetation Type Map (extant plant community types); Land and Soil Capability v4 (DCCEEW); NSW Landuse 2017; EPI flood planning areas (NSW Planning). Information is indicative only; check official sources (QLD Globe, SIX Maps, vegetation management reports) before relying on it.</p>
     </section>
   </aside>
   <div id="map"></div>
@@ -203,6 +204,11 @@ const NSW_CAD = 'https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Cad
 const QLD_VM  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Biota/VegetationManagement/MapServer';
 const QLD_RE  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Biota/RegionalEcosystemMapping/MapServer';
 const QLD_LT  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Environment/LandTypes/MapServer';
+const QLD_LU  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/PlanningCadastre/LandUse/MapServer';
+const QLD_FPO = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/Boundaries/AdminBoundariesFramework/MapServer';
+const QLD_FL  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/InlandWaters/FloodLines/MapServer';
+const NSW_LU  = 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/Landuse/LandUse2017/MapServer';
+const NSW_FLOOD = 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Hazard/MapServer';
 const NSW_LSC = 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/LandCap/LandAndSoilCapability_EDP/MapServer';
 const NSW_PCT = 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/VIS/SVTM_NSW_Extant_PCT/MapServer';
 
@@ -218,9 +224,14 @@ const OVERLAYS = [
   {id:'qbvg', st:'QLD', name:'Broad vegetation groups', url:QLD_RE, layers:[5], op:.6, report:false},
   {id:'qhvr', st:'QLD', name:'High value regrowth', url:QLD_RE, layers:[13], op:.6, report:false},
   {id:'qlt',  st:'QLD', name:'Land types', url:QLD_LT, layers:[1,0], op:.6, report:true, reportLayers:[1]},
+  {id:'qlu',  st:'QLD', name:'Land use (QLUMP)', url:QLD_LU, layers:[0], op:.55, report:true, valueFields:['secondary','tertiary']},
+  {id:'qfpo', st:'QLD', name:'Flooding: floodplain assessment overlay', url:QLD_FPO, layers:[15], op:.5, report:true, valueFields:['sub_name'], valuePrefix:'Floodplain area: '},
+  {id:'qfl',  st:'QLD', name:'Flooding: historic flood lines', url:QLD_FL, layers:[9], op:.7, report:true},
   {id:'qcad', st:'QLD', name:'Cadastre (lot boundaries)', url:QLD_CAD, layers:[4], op:1, report:false},
   {id:'npct', st:'NSW', name:'State Vegetation Type Map (plant community types)', url:NSW_PCT, layers:null, op:.6, report:true},
   {id:'nlsc', st:'NSW', name:'Land and soil capability (class 1-8)', url:NSW_LSC, layers:[2,1], op:.55, report:true, reportLayers:[1], valueField:'LSC_MstLmt', valuePrefix:'LSC class '},
+  {id:'nlu',  st:'NSW', name:'Land use (2017)', url:NSW_LU, layers:[0], op:.55, report:true},
+  {id:'nfld', st:'NSW', name:'Flooding: council flood planning areas', url:NSW_FLOOD, layers:[1], op:.55, report:true, valueFields:['LAY_CLASS','Class','EPI_NAME','EPI Name']},
   {id:'ncad', st:'NSW', name:'Cadastre (lot boundaries)', url:NSW_CAD, layers:null, op:1, report:false}
 ];
 
@@ -417,7 +428,7 @@ function renderList(){
       el('div',{className:'acts'},
         el('button',{className:'btn small',onclick:()=>zoomTo(p)},'Zoom to'),
         el('button',{className:'btn sec small',onclick:()=>download(`${safeName(p.name)}.kml`, buildKML([p], p.name),'application/vnd.google-earth.kml+xml')},'Google Earth (.kml)'),
-        el('button',{className:'btn small',onclick:e=>runReport(p, e.target.closest('.body').querySelector('.report'))},'Vegetation & land type report'),
+        el('button',{className:'btn small',onclick:e=>runReport(p, e.target.closest('.body').querySelector('.report'))},'Land, vegetation & flood report'),
         el('button',{className:'btn sec small',onclick:()=>{ if(!confirmSafe(`Delete ${p.name}?`)) return; props=props.filter(x=>x!==p); if(propLayers[p.id]) propGroup.removeLayer(propLayers[p.id]); delete propLayers[p.id]; save(); renderList(); }},'Delete')),
       el('div',{className:'report'}, p.report? renderReport(p.report):null),
       attrsRows.length? el('details',{style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--navy)'},'Parcel details'), el('table',{className:'tbl'}, el('tbody',null, attrsRows))) : null
@@ -552,6 +563,8 @@ const SKIP_ATTR = /^(objectid|shape|shape_|shape\.|st_area|st_length|fid|globali
 function summariseResult(r, o){
   const a = r.attributes||{};
   if(o && o.valueField && a[o.valueField]!=null && a[o.valueField]!=='Null') return (o.valuePrefix||'')+a[o.valueField];
+  if(o && o.valueFields){ const get=f=>{ const k=Object.keys(a).find(k=>k.toLowerCase()===f.toLowerCase()); return k? a[k] : null; };
+    const vals=o.valueFields.map(get).filter(v=>v!=null && v!=='' && v!=='Null'); if(vals.length) return (o.valuePrefix||'')+[...new Set(vals.map(String))].join(' / '); }
   let v = r.value;
   if(v==null || v==='' || v==='Null'){
     const k = Object.keys(a).find(k=>!SKIP_ATTR.test(k) && a[k]!=null && a[k]!=='Null' && a[k]!=='');
@@ -561,7 +574,7 @@ function summariseResult(r, o){
 }
 async function runReport(p, box){
   if(!p.lots.length) return;
-  box.replaceChildren(el('div',{className:'hint'}, el('span',{className:'spin'}),' Checking vegetation and land type layers inside the boundary…'));
+  box.replaceChildren(el('div',{className:'hint'}, el('span',{className:'spin'}),' Checking land, vegetation and flood layers inside the boundary…'));
   const states=[...new Set(p.lots.map(l=>l.state))];
   const srcs = OVERLAYS.filter(o=>o.report && states.includes(o.st));
   const sections=[];
