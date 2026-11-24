@@ -245,13 +245,22 @@ const uid = ()=> Math.random().toString(36).slice(2,10);
 function store(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 function load(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }
 
-async function getJSON(url, params, post){
+async function getJSON(url, params, post, tries=2){
   const body = new URLSearchParams(Object.assign({f:'json'}, params));
-  const r = post ? await fetch(url, {method:'POST', body}) : await fetch(url + '?' + body.toString());
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  const j = await r.json();
-  if(j.error) throw new Error(j.error.message || 'Service error');
-  return j;
+  for(let t=1;;t++){
+    const ac = new AbortController(); const timer = setTimeout(()=>ac.abort(), 20000);
+    try{
+      const r = post ? await fetch(url, {method:'POST', body, signal:ac.signal}) : await fetch(url + '?' + body.toString(), {signal:ac.signal});
+      if(!r.ok) throw Object.assign(new Error('HTTP '+r.status), {retry:r.status>=500});
+      const j = await r.json();
+      if(j.error) throw Object.assign(new Error(j.error.message || 'Service error'), {retry:j.error.code>=500});
+      return j;
+    }catch(e){
+      const retry = e.name==='AbortError' || e.retry || e instanceof TypeError;
+      if(t>=tries || !retry) throw (e.name==='AbortError' ? new Error('the government map service took too long to answer') : e);
+      await new Promise(r=>setTimeout(r, 600*t));
+    }finally{ clearTimeout(timer); }
+  }
 }
 
 /* ---------- geometry ---------- */
@@ -285,7 +294,7 @@ function parseLot(raw){
   const sec = rest.match(/\b(?:SEC|SECTION)\s*([A-Z0-9]+)/);
   if(sec){ section=sec[1]; rest=rest.replace(sec[0],' ').trim(); }
   let parts = rest.split(/[\/\s]+/).filter(Boolean);
-  let lot = parts[0]||'';
+  let lot = (parts[0]||'').replace(/^0+(?=\d)/,'');
   if(!section && parts.length>1) section = parts[1];
   return {raw, lot, section, prefix, plan, whole:!lot};
 }
@@ -299,13 +308,14 @@ function expandRanges(raw){
 }
 function guessStates(p, pref){
   if(pref==='QLD'||pref==='NSW') return [pref];
-  if(NSW_ONLY.includes(p.prefix) || p.section) return ['NSW','QLD'];
+  if(NSW_ONLY.includes(p.prefix) || p.section) return ['NSW'];
+  if(QLD_ONLY.includes(p.prefix)) return ['QLD'];
   return ['QLD','NSW'];
 }
 
 async function queryQLD(p){
   const lotplan = p.lot + p.plan;
-  const base = {outFields:'*', returnGeometry:true, outSR:4326};
+  const base = {outFields:'lot,plan,lotplan,lot_area,locality,shire_name,tenure,parcel_typ', returnGeometry:true, outSR:4326, geometryPrecision:8};
   let j;
   if(p.whole){
     j = await getJSON(QLD_CAD+'/4/query', Object.assign({where:`plan='${p.plan.replace(/'/g,"''")}'`}, base));
@@ -324,7 +334,7 @@ async function queryQLD(p){
 async function queryNSW(p){
   const ids = p.section ? [`${p.lot}/${p.section}/${p.plan}`] : [`${p.lot}//${p.plan}`, `${p.lot}/${p.plan}`];
   const esc = s=>String(s).replace(/'/g,"''");
-  const base = {outFields:'*', returnGeometry:true, outSR:4326};
+  const base = {outFields:'lotidstring,lotnumber,sectionnumber,plannumber,planlabel,planlotarea,planlotareaunits,urbanity', returnGeometry:true, outSR:4326, geometryPrecision:8};
   const planNo = parseInt(p.plan.replace(/^[A-Z]+/,''),10);
   let feats = [];
   try{
@@ -358,14 +368,20 @@ const save = ()=> store(KEY, props);
 
 /* ---------- map ---------- */
 const map = L.map('map', {zoomControl:true, preferCanvas:false}).setView([-25.5, 147.5], 5);
+const ESRI_IMG = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 const BASES = {
+  'Best imagery (QLD Globe + NSW SIX Maps)': L.layerGroup([
+    L.tileLayer(ESRI_IMG, {maxZoom:21, maxNativeZoom:19, attribution:'&copy; Esri'}),
+    L.tileLayer('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:21, maxNativeZoom:20, bounds:[[-37.6,140.9],[-28.1,153.7]], attribution:'&copy; NSW Spatial Services'}),
+    L.tileLayer('https://spatial-img.information.qld.gov.au/arcgis/rest/services/Basemaps/LatestStateProgram_AllUsers/ImageServer/tile/{z}/{y}/{x}', {maxZoom:21, maxNativeZoom:20, bounds:[[-29.2,137.9],[-9.0,153.6]], attribution:'&copy; State of Queensland'})
+  ]),
   'Satellite imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:20, maxNativeZoom:19, attribution:'Imagery &copy; Esri, Maxar, Earthstar'}),
   'NSW imagery (SIX Maps)': L.tileLayer('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:21, attribution:'&copy; NSW Spatial Services'}),
   'Topographic': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'&copy; Esri'}),
   'Street map': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'})
 };
 const LABELS = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom:20, maxNativeZoom:19, pane:'overlayPane'});
-let baseName = load(KEY+'-base','Satellite imagery'); if(!BASES[baseName]) baseName='Satellite imagery';
+let baseName = load(KEY+'-base2','Best imagery (QLD Globe + NSW SIX Maps)'); if(!BASES[baseName]) baseName='Best imagery (QLD Globe + NSW SIX Maps)';
 BASES[baseName].addTo(map); LABELS.addTo(map);
 map.createPane('props'); map.getPane('props').style.zIndex = 450;
 
@@ -383,7 +399,7 @@ const propLayers = {};
 function drawProp(p){
   if(propLayers[p.id]) propGroup.removeLayer(propLayers[p.id]);
   const fc = {type:'FeatureCollection', features:p.lots.map(l=>({type:'Feature', geometry:l.geo, properties:{id:l.id}}))};
-  const lyr = L.geoJSON(fc, {pane:'props', style:{color:p.color, weight:3, fillColor:p.color, fillOpacity:p.fill??0.25},
+  const lyr = L.geoJSON(fc, {pane:'props', style:{color:p.color, weight:2.5, fillColor:p.color, fillOpacity:p.fill??0.25, smoothFactor:0.3},
     onEachFeature:(f,l)=>{ l.on('click', e=>{ L.DomEvent.stopPropagation(e); openProp(p.id, true); showPropPopup(p, e.latlng); }); }});
   if(p.lots.length){ lyr.bindTooltip(p.name, {permanent:true, direction:'center', className:'plabel'}); }
   propLayers[p.id]=lyr; propGroup.addLayer(lyr);
@@ -450,14 +466,34 @@ function recalc(p){ p.area = p.lots.reduce((s,l)=>s+l.calcArea,0); const t=p.lot
 function zoomTo(p){ if(!p.lots.length) return; map.fitBounds(geoBounds(p.lots.map(l=>l.geo)), {padding:[40,40], maxZoom:17}); }
 
 /* ---------- add property ---------- */
-async function lookup(raw, pref){
+/* lookup cache: repeat searches load instantly */
+const CKEY='easy-mapping-cache-v1', CACHE_MAX=400, CACHE_DAYS=30;
+let lotCache = load(CKEY, {});
+function cacheGet(k){ const c=lotCache[k]; if(!c) return null; if(Date.now()-c.t > CACHE_DAYS*864e5){ delete lotCache[k]; return null; } return c.v; }
+function cachePut(k,v){ lotCache[k]={t:Date.now(), v}; const ks=Object.keys(lotCache); if(ks.length>CACHE_MAX){ ks.sort((a,b)=>lotCache[a].t-lotCache[b].t).slice(0, ks.length-CACHE_MAX).forEach(x=>delete lotCache[x]); }
+  try{ localStorage.setItem(CKEY, JSON.stringify(lotCache)); }catch(e){ lotCache={}; try{ localStorage.removeItem(CKEY); }catch(_){} } }
+const centroidOf = lots => geoBounds(lots.map(l=>l.geo)).getCenter();
+async function lookup(raw, pref, near){
   const p = parseLot(raw); if(!p) return {skip:true};
   if(p.error) return {raw, error:p.error};
-  for(const st of guessStates(p, pref)){
-    try{ const r = st==='QLD' ? await queryQLD(p) : await queryNSW(p); if(r && r.length) return {raw, lots:r}; }
-    catch(e){ console.warn(st, e); if(pref===st) return {raw, error:`${st} cadastre lookup failed (${e.message})`}; }
+  const states = guessStates(p, pref);
+  const key = (st)=> `${st}|${p.lot}|${p.section}|${p.plan}|${p.whole?1:0}`;
+  const res = await Promise.all(states.map(async st=>{
+    const hit = cacheGet(key(st)); if(hit) return {st, lots:hit};
+    try{ const r = st==='QLD' ? await queryQLD(p) : await queryNSW(p); if(r && r.length) cachePut(key(st), r); return {st, lots:r||[]}; }
+    catch(e){ console.warn(st, e); return {st, lots:[], err:e.message}; }
+  }));
+  const found = res.filter(r=>r.lots.length);
+  if(found.length===1) return {raw, lots:found[0].lots};
+  if(found.length>1){
+    // same plan number exists in both states: pick the one nearest the property / current map view
+    const ref = near || map.getCenter();
+    found.sort((a,b)=> ref.distanceTo(centroidOf(a.lots)) - ref.distanceTo(centroidOf(b.lots)));
+    return {raw, lots:found[0].lots, note:`${raw} exists in both QLD and NSW; used ${found[0].st} (closest). Set State to choose.`};
   }
-  return {raw, error:'Not found in '+guessStates(p,pref).join(' or ')+' cadastre'};
+  const errs = res.filter(r=>r.err);
+  if(errs.length===res.length) return {raw, error:`Cadastre lookup failed (${errs[0].err}). Try again.`};
+  return {raw, error:'Not found in '+states.join(' or ')+' cadastre. Check the lot and plan numbers.'};
 }
 async function pool(items, n, fn, onProgress){
   const out=new Array(items.length); let i=0, done=0;
@@ -466,11 +502,13 @@ async function pool(items, n, fn, onProgress){
 }
 async function addLotsTo(prop, raws, pref){
   const list = raws.map(r=>r.trim()).filter(Boolean).flatMap(expandRanges);
-  const res = await pool(list, 4, r=>lookup(r, pref));
+  const near = prop.lots.length ? centroidOf(prop.lots) : null;
+  const res = await pool(list, 6, r=>lookup(r, pref, near));
   const errs=[]; let added=0;
-  res.forEach(r=>{ if(r.skip) return; if(r.error) errs.push(`${r.raw}: ${r.error}`); else r.lots.forEach(l=>{ if(!prop.lots.some(x=>x.id===l.id && x.state===l.state)){ prop.lots.push(l); added++; } }); });
+  const notes=[];
+  res.forEach(r=>{ if(r.skip) return; if(r.note) notes.push(r.note); if(r.error) errs.push(`${r.raw}: ${r.error}`); else r.lots.forEach(l=>{ if(!prop.lots.some(x=>x.id===l.id && x.state===l.state)){ prop.lots.push(l); added++; } }); });
   if(added){ recalc(prop); save(); drawProp(prop); renderList(); zoomTo(prop); }
-  if(errs.length) toast(errs.join(' | '), true); else if(added) toast(`Added ${added} lot${added===1?'':'s'} to ${prop.name}`);
+  if(errs.length) toast(errs.join(' | '), true); else if(notes.length) toast(notes.join(' | ')); else if(added) toast(`Added ${added} lot${added===1?'':'s'} to ${prop.name}`);
   return added;
 }
 $('#addbtn').addEventListener('click', async ()=>{
@@ -519,7 +557,7 @@ async function bulkRun(){
   const btn=$('#bulkbtn'), res=$('#bulkres'); btn.disabled=true;
   const prog = el('div',{className:'hint'}, el('span',{className:'spin'}), ' Searching 0 of '+items.length+' titles…');
   res.replaceChildren(prog);
-  const found = await pool(items, 4, it=>lookup(it.r, pref), (d,n)=>{ prog.lastChild.textContent=` Searching ${d} of ${n} titles…`; });
+  const found = await pool(items, 6, it=>lookup(it.r, pref), (d,n)=>{ prog.lastChild.textContent=` Searching ${d} of ${n} titles…`; });
   const errs=[]; let nProps=0, nLots=0; const touched=[];
   groups.forEach(g=>{
     const hits = items.map((it,i)=>({it, r:found[i]})).filter(x=>x.it.g===g);
@@ -625,7 +663,7 @@ map.on('click', async e=>{
 
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
-  $('#baselist').replaceChildren(...Object.keys(BASES).map(n=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:n===baseName,onchange:()=>{ map.removeLayer(BASES[baseName]); baseName=n; BASES[n].addTo(map); BASES[n].bringToBack(); store(KEY+'-base',n); }}), el('span',null,n))));
+  $('#baselist').replaceChildren(...Object.keys(BASES).map(n=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:n===baseName,onchange:()=>{ map.removeLayer(BASES[baseName]); baseName=n; BASES[n].addTo(map); store(KEY+'-base2',n); }}), el('span',null,n))));
   ['QLD','NSW'].forEach(st=>{
     $('#ovl-'+st).replaceChildren(...OVERLAYS.filter(o=>o.st===st).map(o=>{
       const s = ovState[o.id] || (ovState[o.id]={on:false, op:o.op});
