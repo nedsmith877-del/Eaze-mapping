@@ -512,6 +512,28 @@ function parseLot(raw){
   if(!section && parts.length>1) section = parts[1];
   return {raw, lot, section, prefix, plan, whole:!lot};
 }
+/* PriceFinder / RP Data style titles: "L36, 40 RG165 & L49 RG228 & L28-29 RG427 & L2 SP243178", "Lot 1 Sec 2 DP758123" */
+const PF_GROUP = /^(?:lots?|l)\s*([\d][\d\s,\-–&a-z]*?)\s*(?:(?:sec(?:tion)?|s)\s*(\d+)\s*)?(?:on\s+)?([a-z]{1,5})\s*(\d+)$/i;
+function looksPF(text){ return /(^|[\s&;,])(lots?|l)\s*\d/i.test(text) && /[a-z]{1,5}\s*\d{2,}/i.test(text); }
+function expandPF(text){
+  const out=[];
+  String(text).replace(/&amp;/gi,'&').split(/\s*(?:&|;|\+|\band\b|\n)\s*/i).map(g=>g.replace(/\t/g,' ').trim()).filter(Boolean).forEach(g=>{
+    const m = PF_GROUP.exec(g.replace(/\s+/g,' '));
+    if(!m){ out.push(...g.split(/\s*,\s*/).filter(Boolean)); return; }
+    const plan = m[3].toUpperCase()+m[4], sec=m[2];
+    m[1].split(/\s*,\s*|\s+/).filter(Boolean).forEach(part=>{
+      const r = /^(\d+)\s*[-–]\s*(\d+)$/.exec(part);
+      const nums = r && +r[2]>=+r[1] && +r[2]-+r[1]<=300 ? Array.from({length:+r[2]-+r[1]+1},(_,i)=>+r[1]+i) : [part];
+      nums.forEach(n=> out.push(sec ? `${n}/${sec}/${plan}` : `${n}${plan}`));
+    });
+  });
+  return out;
+}
+function splitTitles(text){
+  const t=String(text).replace(/&amp;/gi,'&').trim();
+  if(looksPF(t)) return expandPF(t);
+  return t.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean);
+}
 function expandRanges(raw){
   // "1-5 RP123456", "Lots 1 to 5 on SP123", "1-3/DP456" -> one entry per lot
   const m = raw.match(/^\s*(?:lots?\s+)?(\d+)\s*(?:-|to)\s*(\d+)\s*(.*\d.*)$/i);
@@ -681,7 +703,7 @@ function renderList(){
       el('table',{className:'tbl'}, el('thead',null, el('tr',null, el('th',null,'State'), el('th',null,'Lot/plan'), el('th',{style:'text-align:right'},'Calc. ha'), el('th',{style:'text-align:right'},'Title ha'), el('th',null,''))), el('tbody',null, lotRows,
         el('tr',{className:'subh'}, el('td',{colSpan:2},'Total'), el('td',{style:'text-align:right'},fmt(p.area/10000)), el('td',{style:'text-align:right'}, p.titleArea?fmt(p.titleArea/10000):'–'), el('td')))),
       el('div',{className:'hint'}, `${fmt(p.area/10000)} ha = ${fmt(p.area/4046.8564224)} acres = ${fmt(p.area/1e6,3)} km². Calc. area is measured from the boundary; title area is the surveyed area recorded on the cadastre.`),
-      el('div',{className:'row',style:'margin-top:8px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, v.split(/[\n,;]+/), 'auto'); e.target.disabled=false; }},'Add lot')),
+      el('div',{className:'row',style:'margin-top:8px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, splitTitles(v), 'auto'); e.target.disabled=false; }},'Add lot')),
       el('div',{className:'acts'},
         el('button',{className:'btn small',onclick:()=>zoomTo(p)},'Zoom to'),
         el('button',{className:'btn sec small',onclick:()=>download(`${safeName(p.name)}.kml`, buildKML([p], p.name),'application/vnd.google-earth.kml+xml')},'Google Earth (.kml)'),
@@ -757,11 +779,12 @@ async function addLotsTo(prop, raws, pref){
   return added;
 }
 function isBulkText(text){
+  const ls=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean); if(ls.length===1 && looksPF(ls[0]) && !ls[0].includes('\t')) return false;
   return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).some(l=>{ if(l.includes('\t')) return true; const cells=splitCells(l).filter(c=>c.trim()); return cells.some(looksLikeLot) && cells.some(c=>!looksLikeLot(c)); });
 }
 $('#addbtn').addEventListener('click', async ()=>{
   if(isBulkText($('#plots').value)){ const btn=$('#addbtn'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Searching…'); try{ await bulkRun(); } catch(e){ toast('Search failed: '+e.message, true); } finally{ btn.disabled=false; btn.textContent='Map titles'; } return; }
-  const raws = $('#plots').value.split(/[\n,;]+/).filter(s=>s.trim());
+  const raws = splitTitles($('#plots').value);
   if(!raws.length){ toast('Enter at least one lot/plan number', true); return; }
   const btn=$('#addbtn'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Looking up…');
   const p = {id:uid(), name:$('#pname').value.trim() || ('Property '+(props.length+1)), cat:selCat, color:selCol, fill:0.25, lots:[], area:0, created:Date.now()};
@@ -896,7 +919,7 @@ function salesEntry(p){
     el('label',null,`Lots (${fmt(p.area/10000)} ha)`),
     el('div',{className:'hint',style:'margin-top:0'}, p.lots.map(l=> el('span',{className:'chip'}, `${l.state} ${l.id}`,
       el('button',{type:'button',title:'Remove lot',onclick:()=>{ p.lots=p.lots.filter(x=>x!==l); recalc(p); changed(); }},'✕')))),
-    el('div',{className:'row',style:'margin-top:4px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, v.split(/[\n,;]+/), 'auto'); e.target.disabled=false; refreshSales(); }},'Add lot')),
+    el('div',{className:'row',style:'margin-top:4px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, splitTitles(v), 'auto'); e.target.disabled=false; refreshSales(); }},'Add lot')),
     el('div',{className:'acts'}, el('button',{className:'btn sec small',onclick:()=>zoomTo(p)},'Zoom to'),
       isSubj? null : el('button',{className:'btn sec small',onclick:()=>{ sState.subject=p.id; store(SKEY,sState); refreshSales(); }},'Make subject')));
   return el('div',{className:'prop'+(sOpen===p.id?' open':''),style:'margin-bottom:6px'},
@@ -915,7 +938,7 @@ let snCat='sale', snCol=catById('sale').hex;
 function renderSnCol(){ $('#snCol').replaceChildren(...PALETTE.map(c=> el('button',{type:'button',className:'sw'+(c.hex===snCol?' on':''),title:c.name+' '+c.hex,style:`background:${c.hex}`,onclick:()=>{ snCol=c.hex; renderSnCol(); }}))); }
 $('#snCat').onchange=e=>{ snCat=e.target.value; snCol=catById(snCat).hex; renderSnCol(); };
 $('#snAdd').onclick=async ()=>{
-  const raws=$('#snLots').value.split(/[\n,;]+/).filter(x=>x.trim());
+  const raws=splitTitles($('#snLots').value);
   if(!raws.length){ toast('Enter the lot/plan numbers for this sale', true); return; }
   const btn=$('#snAdd'); btn.disabled=true; btn.replaceChildren(el('span',{className:'spin'}),' Looking up…');
   const name=$('#snName').value.trim() || ((catById(snCat)||{}).name+' '+(props.filter(p=>p.cat===snCat).length+1));
@@ -1075,7 +1098,7 @@ function parseBulkRow(line){
   if(lotIdx<0) return {header:true, line};
   let cat=null, name='';
   cells.forEach((c,i)=>{ if(i===lotIdx) return; const k=c.toLowerCase().replace(/\s+/g,' ').trim(); if(!cat && CAT_WORDS[k]){ cat=CAT_WORDS[k]; return; } if(!name) name=c; });
-  const lots = cells[lotIdx].split(/\s*(?:&|\+|\band\b)\s*/i).filter(Boolean);
+  const lots = looksPF(cells[lotIdx]) ? expandPF(cells[lotIdx]) : cells[lotIdx].split(/\s*(?:&|\+|\band\b)\s*/i).filter(Boolean);
   return {name, cat, lots};
 }
 async function bulkRun(){
