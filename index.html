@@ -31,8 +31,8 @@ header{padding:18px 20px 12px;display:flex;align-items:center;gap:12px}
 header .logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--blue2),var(--blue) 55%,#006fa0);display:grid;place-items:center;font-weight:700;font-size:16px;color:#fff;box-shadow:0 6px 20px rgba(0,159,223,.45)}
 header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.2px}
 header small{display:block;color:var(--muted);font-size:11.5px;font-weight:500;letter-spacing:.2px;margin-top:1px}
-#tabs{display:flex;gap:4px;margin:0 16px 4px;padding:4px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px}
-#tabs button{flex:1;border:0;background:transparent;padding:8px 4px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:9px;transition:all .2s}
+#tabs{display:flex;gap:2px;margin:0 16px 4px;padding:4px;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px}
+#tabs button{flex:1 1 auto;white-space:nowrap;letter-spacing:-.1px;border:0;background:transparent;padding:8px 3px;font:inherit;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;border-radius:9px;transition:all .2s}
 #tabs button:hover{color:var(--text)}
 #tabs button.on{background:var(--blue);color:#fff;box-shadow:0 4px 14px rgba(0,159,223,.45)}
 .pane{display:none;overflow:auto;flex:1;padding:14px 16px 22px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
@@ -156,6 +156,17 @@ body.snapping #snapbtn{display:none}
 .linkrow a{color:var(--blue2);font-weight:600;text-decoration:none;font-size:12px}
 .salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
 .lyr.dis{opacity:.45}
+.lawd{background:#fff;color:#111;border-radius:10px;padding:10px;margin:10px 0;font-family:Arial,Helvetica,sans-serif}
+.lawd table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.lawd th.bar{background:#00213F;color:#fff;text-align:left;font-size:13px;font-weight:700;letter-spacing:.3px;padding:6px 8px}
+.lawd tr.sub th{background:#B4D7EB;color:#00213F;font-weight:700;padding:5px 8px;text-align:left}
+.lawd td{padding:3px 8px;border:0}
+.lawd .n{text-align:right;white-space:nowrap}
+.lawd tr.tot td{font-weight:700;border-top:1.5px solid #00213F;padding-top:5px}
+.lawd input{width:64px;padding:3px 5px;border:1px solid #9bb;border-radius:4px;background:#f4f9fc;color:#111;text-align:right;font:inherit}
+.lawd .lbl{font-weight:700;color:#00213F;font-size:12.5px;margin:4px 0 4px}
+.lawd textarea{width:100%;min-height:170px;background:#f7fafc;color:#111;border:1px solid #c9d6df;border-radius:6px;padding:6px;font:13px/1.45 Arial,Helvetica,sans-serif}
+.lawd .bignum{font-size:15px;font-weight:700;color:#00213F;margin-top:8px}
 #ovsum{position:absolute;z-index:1000;right:10px;bottom:28px;width:330px;max-width:calc(100% - 20px);max-height:48vh;display:none;flex-direction:column;border-radius:16px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 12px 32px rgba(0,0,0,.45);color:var(--text);font-size:12.5px}
 #ovsum .oh{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
 #ovsum .oh span{flex:1}
@@ -197,8 +208,9 @@ body.snapping #ovsum{display:none!important}
     </header>
     <nav id="tabs">
       <button data-tab="props" class="on">Properties</button>
-      <button data-tab="layers">Map layers</button>
+      <button data-tab="layers">Layers</button>
       <button data-tab="sales">Sales map</button>
+      <button data-tab="cc">Carrying capacity</button>
       <button data-tab="data">Export</button>
     </nav>
 
@@ -280,6 +292,16 @@ body.snapping #ovsum{display:none!important}
       <div id="stable"></div>
     </section>
 
+    <!-- CARRYING CAPACITY -->
+    <section class="pane" id="pane-cc">
+      <h2>Land types &amp; carrying capacity</h2>
+      <label for="ccprop">Property</label>
+      <select id="ccprop"></select>
+      <div class="acts"><button class="btn" id="ccrun">Work out land types</button></div>
+      <div class="hint">Measures the land types inside the boundary (QLD: Land Types of Queensland, as on FutureBeef; NSW: land and soil capability class), then lets you set a carrying rate for each.</div>
+      <div id="ccout"></div>
+    </section>
+
     <!-- DATA -->
     <section class="pane" id="pane-data">
       <h2>Saving</h2>
@@ -352,6 +374,7 @@ const QLD_FPO = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services
 const QLD_FL  = 'https://spatial-gis.information.qld.gov.au/arcgis/rest/services/InlandWaters/FloodLines/MapServer';
 const NSW_LU  = 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/Landuse/LandUse2017/MapServer';
 const NSW_FLOOD = 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Hazard/MapServer';
+const NSW_ASC = 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/Soil/Soils_ASC_SoilTypes_EDP/MapServer';
 const NSW_LSC = 'https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/LandCap/LandAndSoilCapability_EDP/MapServer';
 const NSW_PCT = 'https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/VIS/SVTM_NSW_Extant_PCT/MapServer';
 
@@ -366,12 +389,13 @@ const OVERLAYS = [
   {id:'qre',  st:'QLD', name:'Regional ecosystems (biodiversity status)', url:QLD_RE, layers:[0], op:.6, report:true},
   {id:'qbvg', st:'QLD', name:'Broad vegetation groups', url:QLD_RE, layers:[5], op:.6, report:false},
   {id:'qhvr', st:'QLD', name:'High value regrowth', url:QLD_RE, layers:[13], op:.6, report:false},
-  {id:'qlt',  st:'QLD', name:'Land types', url:QLD_LT, layers:[1,0], op:.6, report:true, reportLayers:[1]},
+  {id:'qlt',  st:'QLD', name:'Land types & soils (Land Types of Queensland, FutureBeef)', url:QLD_LT, layers:[1,0], op:.6, report:true, reportLayers:[1]},
   {id:'qlu',  st:'QLD', name:'Land use (QLUMP)', url:QLD_LU, layers:[0], op:.55, report:true, valueFields:['secondary','tertiary']},
   {id:'qfpo', st:'QLD', name:'Flooding: floodplain assessment overlay', url:QLD_FPO, layers:[15], op:.5, report:true, valueFields:['sub_name'], valuePrefix:'Floodplain area: '},
   {id:'qfl',  st:'QLD', name:'Flooding: historic flood lines', url:QLD_FL, layers:[9], op:.7, report:true},
   {id:'qcad', st:'QLD', name:'Cadastre (lot boundaries)', url:QLD_CAD, layers:[4], op:1, report:false},
   {id:'npct', st:'NSW', name:'State Vegetation Type Map (plant community types)', url:NSW_PCT, layers:null, op:.6, report:true},
+  {id:'nasc', st:'NSW', name:'Soil types (Australian Soil Classification)', url:NSW_ASC, layers:[2], op:.55, report:true, valueField:'ASC_order'},
   {id:'nlsc', st:'NSW', name:'Land and soil capability (class 1-8)', url:NSW_LSC, layers:[2,1], op:.55, report:true, reportLayers:[1], valueField:'LSC_MstLmt', valuePrefix:'LSC class '},
   {id:'nlu',  st:'NSW', name:'Land use (2017)', url:NSW_LU, layers:[0], op:.55, report:true},
   {id:'nfld', st:'NSW', name:'Flooding: council flood planning areas', url:NSW_FLOOD, layers:[1], op:.55, report:true, valueFields:['LAY_CLASS','Class','EPI_NAME','EPI Name']},
@@ -1220,6 +1244,186 @@ function propOverlayInfo(p){
   return box;
 }
 
+/* ---------- land type summary & carrying capacity ---------- */
+let pcLoad;
+function loadClip(){ if(window.polygonClipping) return Promise.resolve(); return pcLoad || (pcLoad = new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/polygon-clipping@0.15.7/dist/polygon-clipping.umd.min.js'; sc.onload=res; sc.onerror=()=>{ pcLoad=null; rej(new Error('Could not load the area tool. Check your internet connection.')); }; document.head.append(sc); })); }
+const sArea = r=>{ let a=0; for(let i=0,n=r.length;i<n;i++){ const p1=r[i], p2=r[(i+1)%n]; a+=p1[0]*p2[1]-p2[0]*p1[1]; } return a/2; };
+function pip(pt, ring){ let c=false; for(let i=0,j=ring.length-1;i<ring.length;j=i++){ const [xi,yi]=ring[i],[xj,yj]=ring[j]; if(((yi>pt[1])!==(yj>pt[1])) && pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi) c=!c; } return c; }
+function esriToMulti(rings){ const outers=[], holes=[]; rings.forEach(r=> (sArea(r)<0? outers:holes).push(r)); if(!outers.length) return holes.map(h=>[h]); const polys=outers.map(o=>[o]); holes.forEach(h=>{ const q=polys.find(q=>pip(h[0],q[0])); if(q) q.push(h); }); return polys; }
+function multiArea(m){ return m.reduce((s,poly)=> s + poly.reduce((t,r,i)=> t + (i? -ringArea(r) : ringArea(r)), 0), 0); }
+function multiCentre(m){ let sx=0, sy=0, sw=0; m.forEach(poly=>{ const a=ringArea(poly[0]); const r=poly[0]; let x=0,y=0; r.forEach(c=>{x+=c[0]; y+=c[1];}); sx+=x/r.length*a; sy+=y/r.length*a; sw+=a; }); return sw? [sx/sw, sy/sw] : null; }
+const SMALL = new Set(['on','and','with','of','the','in','to','or','a','an','over']);
+const titleCase = t=> String(t).toLowerCase().replace(/\s+/g,' ').trim().split(' ').map((w,i)=> i && SMALL.has(w) ? w : w.replace(/(^|[-(\/])([a-z])/g,(m,a,b)=>a+b.toUpperCase())).join(' ');
+const LSC_NAMES = {1:'Class 1 - Extremely high capability land',2:'Class 2 - Very high capability land',3:'Class 3 - High capability land',4:'Class 4 - Moderate capability land',5:'Class 5 - Moderate-low capability land',6:'Class 6 - Low capability land',7:'Class 7 - Very low capability land',8:'Class 8 - Extremely low capability land'};
+const CC_SRC = {
+  QLD:{url:QLD_LT+'/1', fields:'lt_name_1,lt_name_2,lt_name_3,lt_name_4,lt_name_5,percent1,percent2,percent3,percent4,percent5', label:'Land Types of Queensland (DNRMMRRD)',
+       split:a=>{ const out=[]; for(let k=1;k<=5;k++){ const n=a['lt_name_'+k], pc=+a['percent'+k]||0; if(n && pc>0) out.push([titleCase(n), pc/100]); } if(!out.length && a.lt_name_1) out.push([titleCase(a.lt_name_1),1]); const t=out.reduce((s,x)=>s+x[1],0); return t>0? out.map(([n,f])=>[n,f/t]) : out; }},
+  NSW:{url:NSW_LSC+'/1', fields:'LSC_MstLmt', label:'NSW Land and Soil Capability (DCCEEW)',
+       split:a=> [[LSC_NAMES[a.LSC_MstLmt] || 'Unclassified', 1]]}
+};
+async function queryAllFeatures(url, bounds, fields){
+  const feats=[]; const env=[bounds.getWest(),bounds.getSouth(),bounds.getEast(),bounds.getNorth()].join(',');
+  for(let off=0, page=0; page<25; page++){
+    const j = await getJSON(url+'/query', {geometry:env, geometryType:'esriGeometryEnvelope', inSR:4326, spatialRel:'esriSpatialRelIntersects', outFields:fields, returnGeometry:true, outSR:4326, maxAllowableOffset:0.00004, resultOffset:off, resultRecordCount:1000}, true);
+    if(j.error) throw new Error(j.error.message||'Layer query failed');
+    const f=j.features||[]; feats.push(...f); off+=f.length;
+    if(!j.exceededTransferLimit || !f.length) break;
+  }
+  return feats;
+}
+async function computeLandTypes(p, status){
+  await loadClip(); const PC=window.polygonClipping;
+  const rows=new Map(); let measured=0; const sources=[];
+  const states=[...new Set(p.lots.map(l=>l.state))];
+  let pb=null;
+  for(const st of states){
+    const src=CC_SRC[st]; if(!src) continue; sources.push(src.label);
+    const lots=p.lots.filter(l=>l.state===st);
+    const parts=lots.map(l=> l.geo.type==='Polygon'? [l.geo.coordinates] : l.geo.coordinates);
+    const prop = parts.length>1 ? PC.union(...parts) : parts[0];
+    const b=geoBounds(lots.map(l=>l.geo)); pb = pb? pb.extend(b) : b;
+    status(`Reading ${st} land types…`);
+    const feats = await queryAllFeatures(src.url, b, src.fields);
+    status(`Measuring ${feats.length} land type areas inside the boundary…`);
+    for(const f of feats){
+      if(!f.geometry || !f.geometry.rings) continue;
+      let inter; try{ inter = PC.intersection(prop, esriToMulti(f.geometry.rings)); }catch(e){ continue; }
+      if(!inter.length) continue;
+      const a = multiArea(inter); if(a<1) continue; measured+=a;
+      const c = multiCentre(inter);
+      src.split(f.attributes||{}).forEach(([name,frac])=>{ const r=rows.get(name)||{name,m2:0,cx:0,cy:0}; const w=a*frac; if(c){ r.cx=(r.cx*r.m2+c[0]*w)/(r.m2+w); r.cy=(r.cy*r.m2+c[1]*w)/(r.m2+w); } r.m2+=w; rows.set(name,r); });
+    }
+  }
+  return {at:Date.now(), sources, rows:[...rows.values()].sort((a,b)=>b.m2-a.m2), measured, bounds: pb? [pb.getWest(),pb.getSouth(),pb.getEast(),pb.getNorth()] : null};
+}
+const ccTotal = p=> (p.titleArea && Math.abs(p.titleArea-p.area)/p.area < 0.1 ? p.titleArea : p.area)/10000;
+function ccRows(p){
+  const lt=p.cc&&p.cc.lt; if(!lt) return [];
+  const total = ccTotal(p); const scale = total / Math.max(p.area/10000, 1e-9);
+  const out=[]; let other=0;
+  lt.rows.forEach(r=>{ const ha=r.m2/10000*scale; if(ha/total < 0.01) other+=ha; else out.push({name:r.name, ha, cx:r.cx, cy:r.cy}); });
+  const sum = out.reduce((s,r)=>s+r.ha,0)+other; if(total-sum > 0) other += total-sum;
+  if(other>0.5) out.push({name:'Other', ha:other, other:true});
+  // whole hectares that add up to the total
+  let rounded = out.map(r=>Math.round(r.ha)); const diff = Math.round(total) - rounded.reduce((a,b)=>a+b,0);
+  if(rounded.length) rounded[0]+=diff; out.forEach((r,i)=>r.ha=rounded[i]);
+  return out;
+}
+function pctList(rows, total){ const raw=rows.map(r=>r.ha/total*100); const fl=raw.map(Math.floor); let rem=100-fl.reduce((a,b)=>a+b,0); raw.map((v,i)=>[v-fl[i],i]).sort((a,b)=>b[0]-a[0]).forEach(([_,i])=>{ if(rem>0){ fl[i]++; rem--; } }); return fl; }
+function compass(cx,cy,b){
+  if(!b || cx==null) return 'central';
+  const fx=(cx-b[0])/Math.max(b[2]-b[0],1e-9), fy=(cy-b[1])/Math.max(b[3]-b[1],1e-9);
+  const h = fx<0.38?'west':fx>0.62?'east':'', v = fy<0.38?'south':fy>0.62?'north':'';
+  if(!h && !v) return 'central'; return v&&h? `${v}-${h}ern` : `${v||h}ern`;
+}
+function draftText(p, rows){
+  const lt=p.cc.lt, b=lt.bounds; const main=rows.filter(r=>!r.other);
+  if(!main.length) return 'Topography is generally [flat / undulating / hilly] throughout the holding.';
+  const lc = s=> s.charAt(0).toLowerCase()+s.slice(1);
+  const nm = r=> r.name.replace(/^Class \d - /,'').toLowerCase();
+  const sc = r=> { const t=r.name.replace(/^Class \d - /,'').toLowerCase(); return t.charAt(0).toUpperCase()+t.slice(1); };
+  let t = 'Topography is generally [flat / undulating / hilly] throughout the holding. ';
+  const where = r=> compass(r.cx, r.cy, b);
+  if(main.length===1) return t + `Land types are dominated by ${nm(main[0])} country throughout the holding.`;
+  t += `Land types are dominated by ${nm(main[0])} country across the ${where(main[0])} portions`;
+  t += `, grading into ${nm(main[1])} along the ${where(main[1])} areas.`;
+  if(main[2]) t += ` ${sc(main[2])} ${/s$/i.test(main[2].name)?'are':'is'} concentrated through the ${where(main[2])} portions`;
+  if(main[3]) t += `, while minor ${nm(main[3])} occur${/s$/i.test(main[3].name)?'':'s'} in the ${where(main[3])} areas`;
+  if(main[2]) t += '.';
+  return t;
+}
+const ccRates = load(KEY+'-rates', {});
+function renderCC(){
+  const sel=$('#ccprop'); const cur=sel.value;
+  const ps=props.filter(p=>p.lots.length);
+  sel.replaceChildren(...(ps.length? ps.map(p=>el('option',{value:p.id},`${p.name} (${fmt(ccTotal(p),0)} ha)`)) : [el('option',{value:''},'No properties mapped yet')]));
+  if(ps.some(p=>p.id===cur)) sel.value=cur; else if(openId && ps.some(p=>p.id===openId)) sel.value=openId;
+  drawCC();
+}
+function drawCC(){
+  const p=props.find(x=>x.id===$('#ccprop').value), out=$('#ccout');
+  if(!p){ out.replaceChildren(); return; }
+  if(!p.cc || !p.cc.lt || p.cc.sig!==lotSig(p)){ out.replaceChildren(el('div',{className:'hint'}, 'Press "Work out land types" to measure this property.')); return; }
+  const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total);
+  if(p.cc.text==null) p.cc.text=draftText(p, rows);
+  const unit = p.cc.unit||'AE';
+  const rateOf = r=> (p.cc.rates&&p.cc.rates[r.name]!=null)? p.cc.rates[r.name] : (ccRates[r.name+'|'+unit] ?? '');
+  // land type summary
+  const lts = el('div',{className:'lawd'}, el('table',null,
+    el('tr',null, el('th',{className:'bar',colSpan:3},'LAND TYPE SUMMARY')),
+    el('tr',{className:'sub'}, el('th',null,'Land Type'), el('th',{className:'n'},'Approximate Area (ha)'), el('th',{className:'n'},'Proportion (%)')),
+    rows.map((r,i)=> el('tr',null, el('td',null,r.name), el('td',{className:'n'},fmt(r.ha)), el('td',{className:'n'},pct[i]+'%'))),
+    el('tr',{className:'tot'}, el('td',null,'TOTAL'), el('td',{className:'n'},fmt(total)), el('td',{className:'n'},'100%'))));
+  // description
+  const ta = el('textarea',{value:p.cc.text, oninput:e=>{ p.cc.text=e.target.value; save(); }});
+  const desc = el('div',{className:'lawd'}, el('div',{className:'lbl'},'Topography, Vegetation & Pastures'), ta,
+    el('div',{style:'font-size:11px;color:#555;margin-top:4px'}, 'Draft written from the land type map. Edit the [brackets] and anything you know from inspection.'),
+    el('button',{className:'btn sec small',style:'margin-top:6px;color:#00213F;border-color:#9bb',onclick:()=>{ p.cc.text=draftText(p,rows); save(); drawCC(); }},'Re-draft'));
+  // carrying capacity
+  const aeCells=[]; const totCell=el('td',{className:'n'}), avgCell=el('td',{className:'n'}), big=el('div',{className:'bignum'});
+  const recompute=()=>{ let tot=0, haR=0; rows.forEach((r,i)=>{ const rt=+rateOf(r); const ae = rt>0? r.ha/rt : 0; aeCells[i].textContent = rt>0? fmt(ae,0) : '–'; if(rt>0){ tot+=ae; haR+=r.ha; } });
+    totCell.textContent = tot? fmt(tot,0) : '–'; avgCell.textContent = tot? fmt(haR/tot,1) : '–';
+    const say = tot>=1000? Math.round(tot/50)*50 : tot>=200? Math.round(tot/10)*10 : Math.round(tot);
+    big.textContent = tot? `Estimated carrying capacity: ${fmt(tot,0)} ${unit} (say ${fmt(say,0)} ${unit})` : 'Enter a rate for each land type to estimate the carrying capacity.'; };
+  const unitSel = el('select',{style:'width:auto;padding:4px 6px;background:#f4f9fc;color:#111;border:1px solid #9bb',onchange:e=>{ p.cc.unit=e.target.value; save(); drawCC(); }}, ['AE','DSE'].map(u=>el('option',{value:u,selected:u===unit},u==='AE'?'Adult equivalents (AE)':'Dry sheep equivalents (DSE)')));
+  const cct = el('table',null,
+    el('tr',null, el('th',{className:'bar',colSpan:4},'CARRYING CAPACITY')),
+    el('tr',{className:'sub'}, el('th',null,'Land Type'), el('th',{className:'n'},'Area (ha)'), el('th',{className:'n'},`ha per ${unit}`), el('th',{className:'n'},unit)),
+    rows.map((r,i)=>{ const c=el('td',{className:'n'}); aeCells.push(c);
+      const inp=el('input',{type:'number',min:0,step:'any',value:rateOf(r),placeholder:'rate',oninput:e=>{ const v=e.target.value===''?null:+e.target.value; p.cc.rates=p.cc.rates||{}; if(v==null) delete p.cc.rates[r.name]; else { p.cc.rates[r.name]=v; ccRates[r.name+'|'+unit]=v; store(KEY+'-rates',ccRates); } save(); recompute(); }});
+      return el('tr',null, el('td',null,r.name), el('td',{className:'n'},fmt(r.ha)), el('td',{className:'n'},inp), c); }),
+    el('tr',{className:'tot'}, el('td',null,'TOTAL'), el('td',{className:'n'},fmt(total)), avgCell, totCell));
+  const ccBox = el('div',{className:'lawd'}, el('div',{style:'display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px'}, 'Rate unit:', unitSel), cct, big,
+    el('div',{style:'font-size:11px;color:#555;margin-top:4px'}, 'Rates are remembered for each land type, so the next property fills in automatically. Totals use only rows with a rate.'));
+  recompute();
+  const lt=p.cc.lt;
+  out.replaceChildren(lts, desc, ccBox,
+    el('div',{className:'acts'}, el('button',{className:'btn',onclick:()=>copyCC(p)},'Copy tables for Word'), el('button',{className:'btn sec',onclick:()=>ccCSV(p)},'Download (.csv)')),
+    el('div',{className:'hint'}, `Source: ${lt.sources.join('; ')}. Measured ${new Date(lt.at).toLocaleString('en-AU')}. Areas are taken from the land type map inside the boundary and scaled to the ${ccTotal(p)*10000===p.titleArea?'title':'calculated'} area; land types under 1% are grouped as Other. Indicative only.`));
+}
+function ccHTML(p){
+  const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total), unit=p.cc.unit||'AE';
+  const T='border-collapse:collapse;width:100%;font-family:Arial,Helvetica,sans-serif;font-size:10pt';
+  const BAR='background:#00213F;color:#ffffff;font-weight:bold;text-align:left;padding:4px 6px;font-size:11pt';
+  const SUB='background:#B4D7EB;color:#00213F;font-weight:bold;padding:3px 6px';
+  const td=(v,r)=>`<td style="padding:2px 6px;${r?'text-align:right':''}">${v}</td>`;
+  const tot=(v,r)=>`<td style="padding:3px 6px;font-weight:bold;border-top:1px solid #00213F;${r?'text-align:right':''}">${v}</td>`;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  let h=`<table style="${T}"><tr><th colspan="3" style="${BAR}">LAND TYPE SUMMARY</th></tr><tr><th style="${SUB};text-align:left">Land Type</th><th style="${SUB};text-align:right">Approximate Area (ha)</th><th style="${SUB};text-align:right">Proportion (%)</th></tr>`;
+  rows.forEach((r,i)=> h+=`<tr>${td(esc(r.name))}${td(fmt(r.ha),1)}${td(pct[i]+'%',1)}</tr>`);
+  h+=`<tr>${tot('TOTAL')}${tot(fmt(total),1)}${tot('100%',1)}</tr></table>`;
+  h+=`<p style="font-family:Arial,Helvetica,sans-serif;font-size:10pt"><b>Topography, Vegetation &amp; Pastures:</b> ${esc(p.cc.text||'')}</p>`;
+  const rates=p.cc.rates||{}; let tAE=0, tHa=0;
+  let c=`<table style="${T}"><tr><th colspan="4" style="${BAR}">CARRYING CAPACITY</th></tr><tr><th style="${SUB};text-align:left">Land Type</th><th style="${SUB};text-align:right">Area (ha)</th><th style="${SUB};text-align:right">ha per ${unit}</th><th style="${SUB};text-align:right">${unit}</th></tr>`;
+  rows.forEach(r=>{ const rt=+rates[r.name]; const ae=rt>0? r.ha/rt:0; if(rt>0){ tAE+=ae; tHa+=r.ha; } c+=`<tr>${td(esc(r.name))}${td(fmt(r.ha),1)}${td(rt>0?fmt(rt,1):'–',1)}${td(rt>0?fmt(ae,0):'–',1)}</tr>`; });
+  c+=`<tr>${tot('TOTAL')}${tot(fmt(total),1)}${tot(tAE?fmt(tHa/tAE,1):'–',1)}${tot(tAE?fmt(tAE,0):'–',1)}</tr></table>`;
+  return h + (tAE? '<p></p>'+c : '');
+}
+async function copyCC(p){
+  const html=ccHTML(p); const text=html.replace(/<\/(tr|p)>/g,'\n').replace(/<\/t[dh]>/g,'\t').replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<');
+  try{ await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([text],{type:'text/plain'})})]); toast('Copied. Paste into your Word report'); return; }catch(e){}
+  const d=el('div',{style:'position:fixed;left:-9999px;top:0;background:#fff'}); d.innerHTML=html; document.body.append(d);
+  const r=document.createRange(); r.selectNodeContents(d); const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+  try{ document.execCommand('copy'); toast('Copied. Paste into your Word report'); }catch(e){ toast('Copy failed in this browser', true); } s.removeAllRanges(); d.remove();
+}
+function ccCSV(p){
+  const rows=ccRows(p), total=Math.round(ccTotal(p)), pct=pctList(rows,total), unit=p.cc.unit||'AE', rates=p.cc.rates||{};
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const lines=[['Land type','Area (ha)','Proportion (%)',`ha per ${unit}`,unit], ...rows.map((r,i)=>{ const rt=+rates[r.name]; return [r.name, r.ha, pct[i], rt>0?rt:'', rt>0?Math.round(r.ha/rt):'']; }), ['TOTAL', total, 100, '', '']];
+  download(`${safeName(p.name)}-land-types-carrying-capacity.csv`, lines.map(r=>r.map(q).join(',')).join('\r\n'), 'text/csv');
+}
+$('#ccprop').onchange=drawCC;
+$('#ccrun').onclick=async e=>{
+  const p=props.find(x=>x.id===$('#ccprop').value); if(!p) return;
+  const btn=e.target; btn.disabled=true; const out=$('#ccout');
+  const status=m=> out.replaceChildren(el('div',{className:'hint'}, el('span',{className:'spin'}),' '+m));
+  try{ status('Starting…'); const lt=await computeLandTypes(p, status);
+    if(!lt.rows.length) throw new Error('No land type mapping found inside this boundary.');
+    const old=p.cc||{}; p.cc={lt, sig:lotSig(p), unit:old.unit||'AE', rates:old.rates||{}, text:null}; save(); drawCC();
+  }catch(err){ out.replaceChildren(el('div',{className:'hint',style:'color:var(--danger)'}, 'Could not work out land types: '+err.message)); }
+  btn.disabled=false;
+};
+
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
   $('#baselist').replaceChildren(...BASE_DEFS.map(d=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name))),
@@ -1261,7 +1465,7 @@ async function renderLegend(){
 }
 
 /* ---------- tabs ---------- */
-function switchTab(t){ if(t==='sales') renderSalesTab(); document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+t)); }
+function switchTab(t){ if(t==='sales') renderSalesTab(); if(t==='cc') renderCC(); document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+t)); }
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 /* ---------- export / import ---------- */
