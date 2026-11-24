@@ -10,6 +10,8 @@ A browser app for mapping properties in Queensland and New South Wales from thei
   - QLD: regulated vegetation, regional ecosystems, essential habitat, wetlands, watercourses, PMAV, strategic cropping land, land types, land use (QLUMP), the floodplain assessment overlay and historic flood lines.
   - NSW: State Vegetation Type Map, land and soil capability, land use (2017) and council flood planning areas.
 - Click the map to see what each layer shows at that point, or run a per-property report of what lies inside the boundary.
+- Build a sales map: add sale price and date to properties, pick a subject, and get numbered labels with price, $/ha and distance, plus a table. Print it or save it as PDF.
+- Switch base maps (QLD Globe and NSW imagery, satellite hybrid, street, topographic, and Google satellite/roads with your own Google Maps key). Click the map for Google Street View, Google Maps and Google Earth links.
 - Export properties for Google Earth (KML), GIS (GeoJSON), as an area table (CSV), or as a JSON backup. Properties save in your browser automatically.
 
 ## Running it

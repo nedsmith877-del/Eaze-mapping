@@ -83,9 +83,32 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
   #side{width:100%;height:52vh;border-right:0;border-bottom:1px solid var(--line)}
   #map{height:48vh}
 }
+#printsheet{display:none}
+.salelbl{background:transparent;border:0}
+.salecard{background:#fff;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.35);padding:5px 8px 6px;font-size:11.5px;line-height:1.35;color:#1b2a38;white-space:nowrap;border-left:5px solid var(--blue);transform:translate(-50%,-50%);display:inline-block}
+.salecard b{font-size:12.5px;color:var(--navy)}
+.salecard .num{display:inline-block;min-width:20px;height:20px;border-radius:10px;color:#fff;font-weight:700;text-align:center;line-height:20px;margin-right:5px;font-size:11px;padding:0 4px}
+.distlbl{background:rgba(255,255,255,.9);border:0;color:var(--navy);font-weight:600;font-size:11px;box-shadow:none;padding:1px 5px}
+.distlbl:before{display:none}
+.linkrow{margin-top:8px;padding-top:6px;border-top:1px solid #e4e9ee;display:flex;flex-wrap:wrap;gap:8px}
+.linkrow a{color:var(--blue);font-weight:600;text-decoration:none;font-size:12px}
+.salegrid{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
+.lyr.dis{opacity:.45}
 @media print{
+  @page{size:A4 landscape;margin:10mm}
+  html,body{height:auto}
   #side,#toast,.leaflet-control-zoom,.leaflet-control-layers{display:none!important}
-  #map{width:100vw;height:100vh}
+  #app{display:block;height:auto;width:auto}
+  #map{width:100%;height:100vh}
+  body.printing-sales #map{height:120mm;border:1px solid #999}
+  body.printing-sales #printsheet{display:block}
+  #printsheet h1{font-size:18px;margin:0 0 2px;color:#00213F}
+  #printsheet .sub{font-size:11px;color:#555;margin-bottom:6px}
+  #printsheet table{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:6px}
+  #printsheet th{background:#00213F!important;color:#fff!important;text-align:left;padding:4px 5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #printsheet td{padding:3px 5px;border-bottom:1px solid #ccc}
+  #printsheet .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none;border:0}
+  .salecard,.salecard .num,.leaflet-tile,.leaflet-overlay-pane{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
@@ -99,6 +122,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
     <nav id="tabs">
       <button data-tab="props" class="on">Properties</button>
       <button data-tab="layers">Map layers</button>
+      <button data-tab="sales">Sales map</button>
       <button data-tab="data">Save / export</button>
     </nav>
 
@@ -154,6 +178,30 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
       <div id="legend" class="hint">Switch on a layer to see its legend.</div>
     </section>
 
+    <!-- SALES MAP -->
+    <section class="pane" id="pane-sales">
+      <h2>Sales map</h2>
+      <p class="hint" style="font-size:13px">Add a sale price and date to each property (open it on the Properties tab), then build a map of your subject and the sales around it.</p>
+      <label for="stitle">Map title</label>
+      <input type="text" id="stitle" placeholder="e.g. Sales evidence: Example Station">
+      <label for="ssubject">Subject property</label>
+      <select id="ssubject"></select>
+      <label>Sales to show</label>
+      <div id="slist"></div>
+      <label class="lyr" style="margin:6px 0 0;color:var(--text)"><input type="checkbox" id="sdist" checked><span>Show distance from subject</span></label>
+      <label class="lyr" style="margin:0;color:var(--text)"><input type="checkbox" id="sprice" checked><span>Show price and $/ha on labels</span></label>
+      <div class="acts">
+        <button class="btn" id="sshow">Show sales map</button>
+        <button class="btn sec" id="shide">Back to normal map</button>
+      </div>
+      <div class="acts">
+        <button class="btn" id="sprint">Print / save as PDF</button>
+        <button class="btn sec" id="scsv">Sales table (.csv)</button>
+        <button class="btn sec" id="skml">Google Earth (.kml)</button>
+      </div>
+      <div id="stable"></div>
+    </section>
+
     <!-- DATA -->
     <section class="pane" id="pane-data">
       <h2>Saving</h2>
@@ -178,6 +226,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--blue);outline-of
   </aside>
   <div id="map"></div>
 </div>
+<div id="printsheet"></div>
 <div id="toast"></div>
 
 <script>
@@ -382,20 +431,53 @@ const save = ()=> store(KEY, props);
 /* ---------- map ---------- */
 const map = L.map('map', {zoomControl:true, preferCanvas:false}).setView([-25.5, 147.5], 5);
 const ESRI_IMG = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const BASES = {
-  'Best imagery (QLD Globe + NSW SIX Maps)': L.layerGroup([
-    L.tileLayer(ESRI_IMG, {maxZoom:21, maxNativeZoom:19, attribution:'&copy; Esri'}),
-    L.tileLayer('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:21, maxNativeZoom:20, bounds:[[-37.6,140.9],[-28.1,153.7]], attribution:'&copy; NSW Spatial Services'}),
-    L.tileLayer('https://spatial-img.information.qld.gov.au/arcgis/rest/services/Basemaps/LatestStateProgram_AllUsers/ImageServer/tile/{z}/{y}/{x}', {maxZoom:21, maxNativeZoom:20, bounds:[[-29.2,137.9],[-9.0,153.6]], attribution:'&copy; State of Queensland'})
-  ]),
-  'Satellite imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:20, maxNativeZoom:19, attribution:'Imagery &copy; Esri, Maxar, Earthstar'}),
-  'NSW imagery (SIX Maps)': L.tileLayer('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:21, attribution:'&copy; NSW Spatial Services'}),
-  'Topographic': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'&copy; Esri'}),
-  'Street map': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'})
-};
-const LABELS = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom:20, maxNativeZoom:19, pane:'overlayPane'});
-let baseName = load(KEY+'-base2','Best imagery (QLD Globe + NSW SIX Maps)'); if(!BASES[baseName]) baseName='Best imagery (QLD Globe + NSW SIX Maps)';
-BASES[baseName].addTo(map); LABELS.addTo(map);
+const tl = (u,o)=> L.tileLayer(u, Object.assign({maxZoom:21, maxNativeZoom:19}, o||{}));
+const ESRI = n=> `https://server.arcgisonline.com/ArcGIS/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
+const BASE_DEFS = [
+  {name:'Best imagery (QLD Globe + NSW SIX Maps)', labels:true, make:()=> L.layerGroup([
+    tl(ESRI_IMG,{attribution:'&copy; Esri'}),
+    tl('https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom:20, bounds:[[-37.6,140.9],[-28.1,153.7]], attribution:'&copy; NSW Spatial Services'}),
+    tl('https://spatial-img.information.qld.gov.au/arcgis/rest/services/Basemaps/LatestStateProgram_AllUsers/ImageServer/tile/{z}/{y}/{x}', {maxNativeZoom:20, bounds:[[-29.2,137.9],[-9.0,153.6]], attribution:'&copy; State of Queensland'})])},
+  {name:'Satellite + roads (hybrid)', labels:true, make:()=> L.layerGroup([tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar'}), tl(ESRI('Reference/World_Transportation'))])},
+  {name:'Satellite (Esri world imagery)', labels:true, make:()=> tl(ESRI_IMG,{attribution:'Imagery &copy; Esri, Maxar, Earthstar'})},
+  {name:'Street map', labels:false, make:()=> tl(ESRI('World_Street_Map'),{attribution:'&copy; Esri, HERE, Garmin'})},
+  {name:'Topographic', labels:false, make:()=> tl(ESRI('World_Topo_Map'),{attribution:'&copy; Esri'})},
+  {name:'Google satellite', google:'satellite', labels:true},
+  {name:'Google satellite + roads (Google Earth style)', google:'hybrid', labels:false},
+  {name:'Google Maps (roads)', google:'roadmap', labels:false},
+  {name:'Google terrain', google:'terrain', labels:false}
+];
+const BASES = {};
+const LABELS = L.tileLayer(ESRI('Reference/World_Boundaries_and_Places'), {maxZoom:21, maxNativeZoom:19, pane:'overlayPane'});
+let gKey = load(KEY+'-gkey','');
+let googleReady = null;
+function loadScript(src){ return new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=src; sc.async=true; sc.onload=res; sc.onerror=()=>rej(new Error('Could not load '+src.split('?')[0])); document.head.append(sc); }); }
+function loadGoogle(){
+  if(!gKey) return Promise.reject(new Error('Add a Google Maps key first (Map layers tab)'));
+  if(!googleReady) googleReady = new Promise((res,rej)=>{
+    window.__gmReady = ()=> res();
+    window.gm_authFailure = ()=>{ toast('Google rejected the key. Check it is a Maps JavaScript API key with billing enabled.', true); };
+    loadScript(`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(gKey)}&callback=__gmReady&loading=async`).catch(rej);
+  }).then(()=> loadScript('https://unpkg.com/leaflet.gridlayer.googlemutant@0.14.1/dist/Leaflet.GoogleMutant.js'));
+  googleReady.catch(()=>{ googleReady=null; });
+  return googleReady;
+}
+async function getBase(name){
+  if(BASES[name]) return BASES[name];
+  const d = BASE_DEFS.find(x=>x.name===name) || BASE_DEFS[0];
+  if(d.google){ await loadGoogle(); BASES[d.name] = L.gridLayer.googleMutant({type:d.google, maxZoom:21}); }
+  else BASES[d.name] = d.make();
+  return BASES[d.name];
+}
+let baseName = load(KEY+'-base2', BASE_DEFS[0].name); if(!BASE_DEFS.some(d=>d.name===baseName)) baseName=BASE_DEFS[0].name;
+async function setBase(name){
+  let lyr; try{ lyr = await getBase(name); }catch(e){ toast(e.message, true); renderLayersTab(); return; }
+  if(BASES[baseName] && map.hasLayer(BASES[baseName])) map.removeLayer(BASES[baseName]);
+  baseName = name; lyr.addTo(map); store(KEY+'-base2', name);
+  const d = BASE_DEFS.find(x=>x.name===name);
+  if(d && d.labels) LABELS.addTo(map); else map.removeLayer(LABELS);
+}
+setBase(baseName).catch(()=> setBase(BASE_DEFS[0].name));
 map.createPane('props'); map.getPane('props').style.zIndex = 450;
 
 const ovState = load(KEY+'-ovl', {});
@@ -406,6 +488,7 @@ function makeOverlay(o){
   return L.esri.dynamicMapLayer(opts);
 }
 
+let salesMode = false;
 const propGroup = L.featureGroup().addTo(map);
 const propLayers = {};
 
@@ -414,12 +497,13 @@ function drawProp(p){
   const fc = {type:'FeatureCollection', features:p.lots.map(l=>({type:'Feature', geometry:l.geo, properties:{id:l.id}}))};
   const lyr = L.geoJSON(fc, {pane:'props', style:{color:p.color, weight:2.5, fillColor:p.color, fillOpacity:p.fill??0.25, smoothFactor:0.3},
     onEachFeature:(f,l)=>{ l.on('click', e=>{ L.DomEvent.stopPropagation(e); openProp(p.id, true); showPropPopup(p, e.latlng); }); }});
-  if(p.lots.length){ lyr.bindTooltip(p.name, {permanent:true, direction:'center', className:'plabel'}); }
+  if(p.lots.length && !salesMode){ lyr.bindTooltip(p.name, {permanent:true, direction:'center', className:'plabel'}); }
   propLayers[p.id]=lyr; propGroup.addLayer(lyr);
 }
 function showPropPopup(p, latlng){
   const c = el('div',null, el('b',null,p.name), el('br'), (catById(p.cat)||{}).name||'', el('br'),
-    `${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)`, el('br'), `${p.lots.length} lot(s): ${p.lots.map(l=>l.id).join(', ')}`);
+    `${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)`, el('br'), `${p.lots.length} lot(s): ${p.lots.map(l=>l.id).join(', ')}`,
+    p.sale&&p.sale.price? el('div',null, `${money(p.sale.price)}${p.sale.date?' · '+fmtDate(p.sale.date):''} · ${money(p.sale.price/(p.area/10000))}/ha`) : null, placeLinks(latlng));
   L.popup().setLatLng(latlng).setContent(c).openOn(map);
 }
 const catById = id => CATEGORIES.find(c=>c.id===id);
@@ -451,6 +535,7 @@ function renderList(){
       el('div',{className:'row'}, el('div',null, el('label',null,'Name'), el('input',{type:'text',value:p.name,onchange:e=>{ p.name=e.target.value||p.name; save(); drawProp(p); renderList(); }})), el('div',null, el('label',null,'Category'), catSel)),
       el('label',null,'Colour'), swatches,
       el('label',null,'Fill strength'), fillR,
+      saleEditor(p),
       el('table',{className:'tbl'}, el('thead',null, el('tr',null, el('th',null,'State'), el('th',null,'Lot/plan'), el('th',{style:'text-align:right'},'Calc. ha'), el('th',{style:'text-align:right'},'Title ha'), el('th',null,''))), el('tbody',null, lotRows,
         el('tr',{className:'subh'}, el('td',{colSpan:2},'Total'), el('td',{style:'text-align:right'},fmt(p.area/10000)), el('td',{style:'text-align:right'}, p.titleArea?fmt(p.titleArea/10000):'–'), el('td')))),
       el('div',{className:'hint'}, `${fmt(p.area/10000)} ha = ${fmt(p.area/4046.8564224)} acres = ${fmt(p.area/1e6,3)} km². Calc. area is measured from the boundary; title area is the surveyed area recorded on the cadastre.`),
@@ -534,6 +619,142 @@ $('#addbtn').addEventListener('click', async ()=>{
     if(n){ props.push(p); save(); drawProp(p); openId=p.id; renderList(); $('#plots').value=''; $('#pname').value=''; }
   } finally { btn.disabled=false; btn.textContent='Find & map property'; }
 });
+
+/* ---------- sale details ---------- */
+const money = n=> n==null||isNaN(n) ? '' : '$'+Math.round(n).toLocaleString('en-AU');
+const fmtDate = d=>{ if(!d) return ''; const x=new Date(d+'T00:00:00'); return isNaN(x)? d : x.toLocaleDateString('en-AU',{month:'short',year:'numeric'}); };
+function parsePrice(v){ v=String(v||'').toLowerCase().replace(/[$,\s]/g,''); if(!v) return null; let m=1; if(/m$/.test(v)){m=1e6;v=v.slice(0,-1);} else if(/k$/.test(v)){m=1e3;v=v.slice(0,-1);} const n=parseFloat(v)*m; return isNaN(n)?null:n; }
+function saleEditor(p){
+  p.sale = p.sale || {};
+  const ha = p.area/10000;
+  const per = el('div',{className:'hint'});
+  const upd = ()=>{ per.textContent = p.sale.price ? `${money(p.sale.price)} = ${money(p.sale.price/ha)}/ha = ${money(p.sale.price/(p.area/4046.8564224))}/ac` : 'Add a price to see $/ha and $/ac.'; };
+  upd();
+  const lbl = {sale:'Sale price', forsale:'Asking price', quote:'Quote / estimate', subject:'Value / price'}[p.cat] || 'Price';
+  return el('details',{open:!!p.sale.price,style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--navy);font-weight:600'},'Sale details'),
+    el('div',{className:'salegrid'},
+      el('div',null, el('label',null,lbl), el('input',{type:'text',inputMode:'decimal',value:p.sale.price?Math.round(p.sale.price).toLocaleString('en-AU'):'',placeholder:'e.g. 4,250,000 or 4.25m',onchange:e=>{ p.sale.price=parsePrice(e.target.value); e.target.value=p.sale.price?Math.round(p.sale.price).toLocaleString('en-AU'):''; save(); upd(); refreshSales(); }})),
+      el('div',null, el('label',null,'Date'), el('input',{type:'date',value:p.sale.date||'',onchange:e=>{ p.sale.date=e.target.value; save(); refreshSales(); }}))),
+    el('label',null,'Notes (e.g. buyer, improvements, water)'), el('input',{type:'text',value:p.sale.notes||'',onchange:e=>{ p.sale.notes=e.target.value; save(); refreshSales(); }}),
+    per);
+}
+
+/* ---------- sales map ---------- */
+const SKEY = KEY+'-sales';
+let sState = load(SKEY, {title:'', subject:'', include:{}, dist:true, price:true});
+const salesLayer = L.layerGroup();
+const isSaleCat = p=> ['sale','forsale','quote'].includes(p.cat) || (p.sale&&p.sale.price&&p.cat!=='subject');
+function salesPick(){
+  const subj = props.find(p=>p.id===sState.subject && p.lots.length) || null;
+  let list = props.filter(p=>p!==subj && p.lots.length && (sState.include[p.id] ?? isSaleCat(p)));
+  const sc = subj ? centroidOf(subj.lots) : null;
+  const rows = list.map(p=>{ const c=centroidOf(p.lots); return {p, c, dist: sc? sc.distanceTo(c)/1000 : null}; });
+  rows.sort((a,b)=> sc ? a.dist-b.dist : String(b.p.sale&&b.p.sale.date||'').localeCompare(String(a.p.sale&&a.p.sale.date||'')));
+  rows.forEach((r,i)=> r.n=i+1);
+  return {subj, sc, rows};
+}
+function saleCard(n, p, color, showPrice, dist){
+  const ha=p.area/10000, s=p.sale||{};
+  const card = el('div',{className:'salecard',style:`border-left-color:${color}`},
+    el('div',null, el('span',{className:'num',style:`background:${color}`}, n), el('b',null,p.name)),
+    el('div',null, `${(catById(p.cat)||{}).name||''} · ${fmt(ha,0)} ha`));
+  if(showPrice && s.price) card.append(el('div',null, `${money(s.price)} · ${money(s.price/ha)}/ha`));
+  if(s.date) card.append(el('div',null, fmtDate(s.date)));
+  if(dist!=null) card.append(el('div',{style:'color:#5d6b78'}, `${fmt(dist,1)} km from subject`));
+  return card;
+}
+function renderSalesMap(){
+  salesLayer.clearLayers();
+  const {subj, sc, rows} = salesPick();
+  const items = [];
+  if(subj) items.push({n:'S', p:subj, c:sc, dist:null, z:1000});
+  rows.forEach(r=> items.push({n:r.n, p:r.p, c:r.c, dist: sState.dist&&sc ? r.dist : null, z:0}));
+  if(sState.dist && sc) rows.forEach(r=>{
+    salesLayer.addLayer(L.polyline([sc, r.c], {color:'#00213F', weight:1.5, dashArray:'6 5', opacity:.85, interactive:false}));
+  });
+  // place label cards so they don't sit on top of each other
+  const placed=[]; const W=190, GAP=8;
+  const offs=[[0,0],[0,-1],[0,1],[1,0],[-1,0],[1,-1],[-1,-1],[1,1],[-1,1],[0,-2],[0,2],[2,0],[-2,0],[2,-1],[-2,1],[0,-3],[0,3]];
+  items.forEach(it=>{
+    const lines = 2 + (sState.price && it.p.sale && it.p.sale.price ? 1:0) + (it.p.sale && it.p.sale.date ? 1:0) + (it.dist!=null?1:0);
+    const H = lines*16+12;
+    const pt = map.latLngToContainerPoint(it.c);
+    let box=null;
+    for(const [ox,oy] of offs){
+      const cx=pt.x+ox*(W+GAP), cy=pt.y+oy*(H+GAP);
+      const bx={x1:cx-W/2,y1:cy-H/2,x2:cx+W/2,y2:cy+H/2};
+      if(!placed.some(q=> bx.x1<q.x2 && bx.x2>q.x1 && bx.y1<q.y2 && bx.y2>q.y1)){ box=bx; break; }
+    }
+    if(!box) box={x1:pt.x-W/2,y1:pt.y-H/2,x2:pt.x+W/2,y2:pt.y+H/2};
+    placed.push(box);
+    const at = map.containerPointToLatLng([(box.x1+box.x2)/2,(box.y1+box.y2)/2]);
+    if(at.distanceTo(it.c) > 1) salesLayer.addLayer(L.polyline([it.c, at], {color:it.p.color, weight:2, interactive:false}));
+    salesLayer.addLayer(L.circleMarker(it.c, {radius:4, color:'#fff', weight:2, fillColor:it.p.color, fillOpacity:1, interactive:false}));
+    salesLayer.addLayer(L.marker(at, {icon:L.divIcon({className:'salelbl', html:saleCard(it.n, it.p, it.p.color, sState.price, it.dist), iconSize:null}), interactive:false, zIndexOffset:it.z}));
+  });
+  if(sState.dist && sc) rows.forEach(r=>{
+    const mid = L.latLng((sc.lat+r.c.lat)/2,(sc.lng+r.c.lng)/2);
+    const mp = map.latLngToContainerPoint(mid);
+    if(!placed.some(q=> mp.x>q.x1-20 && mp.x<q.x2+20 && mp.y>q.y1-8 && mp.y<q.y2+8))
+      salesLayer.addLayer(L.tooltip({permanent:true, direction:'center', className:'distlbl'}).setLatLng(mid).setContent(`${fmt(r.dist,1)} km`));
+  });
+  return {subj, sc, rows};
+}
+map.on('zoomend', ()=>{ if(salesMode) renderSalesMap(); });
+function salesBounds(){ const {subj, rows}=salesPick(); const ps=[subj, ...rows.map(r=>r.p)].filter(Boolean); return ps.length? geoBounds(ps.flatMap(p=>p.lots.map(l=>l.geo))) : null; }
+function setSalesMode(on){
+  salesMode = on; props.forEach(drawProp);
+  if(on){ salesLayer.addTo(map); renderSalesMap(); const b=salesBounds(); if(b) map.fitBounds(b,{padding:[60,60], maxZoom:15}); }
+  else { map.removeLayer(salesLayer); salesLayer.clearLayers(); }
+}
+function salesTableData(){
+  const {subj, rows} = salesPick();
+  const line = (n,p,dist)=>{ const ha=p.area/10000, s=p.sale||{}; return {n, p, name:p.name, cat:(catById(p.cat)||{}).name||'', date:fmtDate(s.date), price:s.price||null, ha, perha:s.price?s.price/ha:null, perac:s.price?s.price/(p.area/4046.8564224):null, dist, lots:p.lots.map(l=>l.id).join(', '), notes:s.notes||''}; };
+  return [subj? line('S',subj,null):null, ...rows.map(r=>line(r.n,r.p,r.dist))].filter(Boolean);
+}
+function renderSalesTab(){
+  const subjSel = $('#ssubject');
+  subjSel.replaceChildren(el('option',{value:''},'(no subject)'), ...props.map(p=> el('option',{value:p.id, selected:p.id===sState.subject}, p.name)));
+  if(!sState.subject){ const s=props.find(p=>p.cat==='subject'); if(s){ sState.subject=s.id; subjSel.value=s.id; } }
+  $('#stitle').value = sState.title||'';
+  $('#sdist').checked = sState.dist!==false; $('#sprice').checked = sState.price!==false;
+  const others = props.filter(p=>p.id!==sState.subject);
+  $('#slist').replaceChildren(...(others.length? others.map(p=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'},
+      el('input',{type:'checkbox',checked: sState.include[p.id] ?? isSaleCat(p), onchange:e=>{ sState.include[p.id]=e.target.checked; store(SKEY,sState); refreshSales(); }}),
+      el('span',{className:'dot',style:`background:${p.color};width:12px;height:12px;flex:none`}),
+      el('span',null, p.name), el('span',{style:'flex:none;font-size:12px;color:var(--muted)'}, p.sale&&p.sale.price? money(p.sale.price) : 'no price'))) : [el('div',{className:'hint'},'Add some sale properties first.')]));
+  const data = salesTableData();
+  $('#stable').replaceChildren(data.length? el('table',{className:'tbl',style:'margin-top:12px'},
+    el('thead',null, el('tr',null, ...['#','Property','Date','Price','ha','$/ha','km'].map(h=>el('th',null,h)))),
+    el('tbody',null, data.map(d=> el('tr',null, el('td',null, el('span',{className:'dot',style:`background:${d.p.color};display:inline-block;width:10px;height:10px;margin-right:3px`}), d.n), el('td',null,d.name), el('td',null,d.date), el('td',null,money(d.price)), el('td',null,fmt(d.ha,0)), el('td',null,money(d.perha)), el('td',null,d.dist!=null?fmt(d.dist,1):''))))) : '');
+}
+function refreshSales(){ renderSalesTab(); if(salesMode) renderSalesMap(); }
+$('#ssubject').onchange=e=>{ sState.subject=e.target.value; store(SKEY,sState); refreshSales(); };
+$('#stitle').onchange=e=>{ sState.title=e.target.value; store(SKEY,sState); };
+$('#sdist').onchange=e=>{ sState.dist=e.target.checked; store(SKEY,sState); refreshSales(); };
+$('#sprice').onchange=e=>{ sState.price=e.target.checked; store(SKEY,sState); refreshSales(); };
+$('#sshow').onclick=()=>{ if(!salesTableData().length){ toast('Add a subject or some sales first', true); return; } setSalesMode(true); };
+$('#shide').onclick=()=> setSalesMode(false);
+$('#sprint').onclick=()=>{
+  const data = salesTableData(); if(!data.length){ toast('Add a subject or some sales first', true); return; }
+  setSalesMode(true);
+  const sheet = $('#printsheet');
+  sheet.replaceChildren(el('h1',null, sState.title || 'Sales map'), el('div',{className:'sub'}, 'Prepared '+new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})));
+  document.body.classList.add('printing-sales');
+  map.invalidateSize();
+  const b = salesBounds(); if(b) map.fitBounds(b,{padding:[50,50], maxZoom:15});
+  sheet.append(el('table',null, el('thead',null, el('tr',null, ...['#','Property','Category','Lots','Date','Price','Area (ha)','$/ha','$/ac','Distance (km)','Notes'].map(h=>el('th',null,h)))),
+    el('tbody',null, data.map(d=> el('tr',null, el('td',null, el('span',{className:'sw',style:`background:${d.p.color}`}), d.n), el('td',null,d.name), el('td',null,d.cat), el('td',null,d.lots), el('td',null,d.date), el('td',null,money(d.price)), el('td',null,fmt(d.ha,1)), el('td',null,money(d.perha)), el('td',null,money(d.perac)), el('td',null,d.dist!=null?fmt(d.dist,1):''), el('td',null,d.notes))))));
+  setTimeout(()=>{ try{ window.print(); }catch(e){} }, 1800);
+};
+window.addEventListener('afterprint', ()=>{ if(document.body.classList.contains('printing-sales')){ document.body.classList.remove('printing-sales'); $('#printsheet').replaceChildren(); map.invalidateSize(); } });
+$('#scsv').onclick=()=>{
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=[['#','Property','Category','Lots','Date','Price','Area (ha)','$/ha','$/ac','Distance from subject (km)','Notes'],
+    ...salesTableData().map(d=>[d.n,d.name,d.cat,d.lots,d.date,d.price?Math.round(d.price):'',d.ha.toFixed(2),d.perha?Math.round(d.perha):'',d.perac?Math.round(d.perac):'',d.dist!=null?d.dist.toFixed(1):'',d.notes])];
+  download(`sales-table-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
+};
+$('#skml').onclick=()=>{ const d=salesTableData(); if(!d.length){ toast('Nothing to export', true); return; } download(`sales-map-${stamp()}.kml`, buildKML(d.map(x=>x.p), sState.title||'Sales map'),'application/vnd.google-earth.kml+xml'); };
 
 /* ---------- bulk search ---------- */
 const CAT_WORDS = {subject:'subject',subjects:'subject',quote:'quote',quotes:'quote',sale:'sale',sales:'sale',sold:'sale','for sale':'forsale',forsale:'forsale','for sales':'forsale',other:'other'};
@@ -659,9 +880,17 @@ function renderReport(rep){
 }
 
 /* ---------- click identify ---------- */
+function placeLinks(ll){
+  const lat=ll.lat.toFixed(6), lng=ll.lng.toFixed(6);
+  return el('div',{className:'linkrow'},
+    el('a',{href:`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`,target:'_blank',rel:'noopener'},'Google Street View'),
+    el('a',{href:`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`,target:'_blank',rel:'noopener'},'Google Maps'),
+    el('a',{href:`https://earth.google.com/web/@${lat},${lng},300a,2500d,35y,0h,45t,0r`,target:'_blank',rel:'noopener'},'Google Earth'),
+    el('span',{style:'font-size:11px;color:#777;width:100%'},`${lat}, ${lng}`));
+}
 map.on('click', async e=>{
   const active = OVERLAYS.filter(o=>ovLayers[o.id] && map.hasLayer(ovLayers[o.id]) && !/cad$/.test(o.id));
-  if(!active.length) return;
+  if(!active.length){ L.popup().setLatLng(e.latlng).setContent(placeLinks(e.latlng)).openOn(map); return; }
   const pop = L.popup().setLatLng(e.latlng).setContent('<span class="spin"></span> Identifying…').openOn(map);
   const out = el('div');
   for(const o of active){
@@ -671,12 +900,19 @@ map.on('click', async e=>{
       out.append(el('div',{style:'margin-bottom:6px'}, el('b',null,o.name), res.length? res.slice(0,8).map(r=> el('div',null, (r.layerName?r.layerName+': ':'') + summariseResult(r,o))) : el('div',{style:'color:#777'},'Nothing mapped here')));
     }catch(err){ out.append(el('div',null, el('b',null,o.name), el('div',{style:'color:#b00020'}, err.message))); }
   }
+  out.append(placeLinks(e.latlng));
   pop.setContent(out);
 });
 
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
-  $('#baselist').replaceChildren(...Object.keys(BASES).map(n=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:n===baseName,onchange:()=>{ map.removeLayer(BASES[baseName]); baseName=n; BASES[n].addTo(map); store(KEY+'-base2',n); }}), el('span',null,n))));
+  const keyIn = el('input',{type:'text',value:gKey,placeholder:'Paste Google Maps API key',style:'font-size:12px'});
+  $('#baselist').replaceChildren(...BASE_DEFS.map(d=>{ const off = d.google && !gKey;
+      return el('label',{className:'lyr'+(off?' dis':''),style:'margin:0;color:var(--text)',title:off?'Add a Google Maps key below to use this':''}, el('input',{type:'radio',name:'base',disabled:off,checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name+(off?' (needs key)':''))); }),
+    el('details',{style:'margin-top:8px'}, el('summary',{style:'font-size:12px;cursor:pointer;color:var(--navy)'}, gKey?'Google Maps key saved':'Turn on Google map views'),
+      el('div',{className:'hint'},'Google satellite and road maps need your own free Google Maps API key (Google Cloud console, Maps JavaScript API). The key is only saved in this browser.'),
+      el('div',{className:'row',style:'margin-top:6px'}, keyIn, el('button',{className:'btn small',style:'flex:none',onclick:()=>{ gKey=keyIn.value.trim(); store(KEY+'-gkey',gKey); googleReady=null; renderLayersTab(); toast(gKey?'Google key saved':'Google key removed'); }},'Save'))),
+    el('div',{className:'hint',style:'margin-top:6px'},'Street View: click anywhere on the map, then choose Google Street View.'));
   ['QLD','NSW'].forEach(st=>{
     $('#ovl-'+st).replaceChildren(...OVERLAYS.filter(o=>o.st===st).map(o=>{
       const s = ovState[o.id] || (ovState[o.id]={on:false, op:o.op});
@@ -714,7 +950,7 @@ async function renderLegend(){
 }
 
 /* ---------- tabs ---------- */
-function switchTab(t){ document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+t)); }
+function switchTab(t){ if(t==='sales') renderSalesTab(); document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t)); document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='pane-'+t)); }
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 /* ---------- export / import ---------- */
@@ -745,7 +981,7 @@ function buildKML(list, title){
   const poly=pc=>`<Polygon><tessellate>1</tessellate><outerBoundaryIs>${ring(pc[0])}</outerBoundaryIs>${pc.slice(1).map(h=>`<innerBoundaryIs>${ring(h)}</innerBoundaryIs>`).join('')}</Polygon>`;
   const styles = [...new Set(list.map(p=>p.color))].map(c=>`<Style id="c${c.slice(1)}"><LineStyle><color>${kcol(c,'ff')}</color><width>3</width></LineStyle><PolyStyle><color>${kcol(c,'59')}</color></PolyStyle><LabelStyle><scale>0</scale></LabelStyle></Style><Style id="l${c.slice(1)}"><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle></Style>`).join('');
   const desc = p=>{ const cat=(catById(p.cat)||{}).name||'';
-    return `<![CDATA[<table style="font-family:Arial;font-size:12px;border-collapse:collapse"><tr><td colspan="2" style="background:#00213F;color:#fff;padding:4px 6px;font-weight:bold">${x(p.name)}</td></tr><tr><td style="padding:3px 6px">Category</td><td>${x(cat)}</td></tr><tr><td style="padding:3px 6px">Area</td><td>${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)</td></tr>${p.titleArea?`<tr><td style="padding:3px 6px">Title area</td><td>${fmt(p.titleArea/10000)} ha</td></tr>`:''}<tr><td style="padding:3px 6px;background:#B4D7EB" colspan="2">Lots</td></tr>${p.lots.map(l=>`<tr><td style="padding:3px 6px">${x(l.state)} ${x(l.id)}</td><td>${fmt(l.calcArea/10000)} ha</td></tr>`).join('')}</table>]]>`; };
+    return `<![CDATA[<table style="font-family:Arial;font-size:12px;border-collapse:collapse"><tr><td colspan="2" style="background:#00213F;color:#fff;padding:4px 6px;font-weight:bold">${x(p.name)}</td></tr><tr><td style="padding:3px 6px">Category</td><td>${x(cat)}</td></tr><tr><td style="padding:3px 6px">Area</td><td>${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)</td></tr>${p.sale&&p.sale.price?`<tr><td style="padding:3px 6px">Price</td><td>${money(p.sale.price)} (${money(p.sale.price/(p.area/10000))}/ha)${p.sale.date?' · '+x(fmtDate(p.sale.date)):''}</td></tr>`:''}${p.titleArea?`<tr><td style="padding:3px 6px">Title area</td><td>${fmt(p.titleArea/10000)} ha</td></tr>`:''}<tr><td style="padding:3px 6px;background:#B4D7EB" colspan="2">Lots</td></tr>${p.lots.map(l=>`<tr><td style="padding:3px 6px">${x(l.state)} ${x(l.id)}</td><td>${fmt(l.calcArea/10000)} ha</td></tr>`).join('')}</table>]]>`; };
   const folders = list.map(p=>{ if(!p.lots.length) return '';
     const c = geoBounds(p.lots.map(l=>l.geo)).getCenter();
     const lots = p.lots.map(l=>{ const ps=l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates;
@@ -755,11 +991,11 @@ function buildKML(list, title){
 }
 const safeName = s=>String(s).replace(/[^A-Za-z0-9 _-]+/g,'').trim().replace(/\s+/g,'-')||'property';
 $('#expkml').onclick=()=>{ if(!props.length){ toast('No properties to export', true); return; } download(`easy-mapping-properties-${stamp()}.kml`, buildKML(props,'Easy Mapping properties'),'application/vnd.google-earth.kml+xml'); };
-$('#printbtn').onclick=()=> window.print();
+$('#printbtn').onclick=()=>{ document.body.classList.remove('printing-sales'); window.print(); };
 $('#clearall').onclick=()=>{ if(!props.length||!confirmSafe('Remove all properties from this browser? Export first if you want a copy.')) return; props=[]; propGroup.clearLayers(); for(const k in propLayers) delete propLayers[k]; save(); renderList(); };
 
 /* ---------- init ---------- */
-renderPickers(); renderLayersTab(); renderLegend();
+renderPickers(); renderLayersTab(); renderLegend(); renderSalesTab();
 props.forEach(drawProp); renderList();
 if(props.length){ try{ map.fitBounds(propGroup.getBounds(),{padding:[30,30]}); }catch(e){} }
 })();
