@@ -1767,7 +1767,7 @@ async function refreshParcelLabels(){
   const found=[];
   for(const o of on){
     if(!STATE_BOX[o.st].intersects(b)) continue;
-    const params={geometry:[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(','), geometryType:'esriGeometryEnvelope', inSR:4326, spatialRel:'esriSpatialRelIntersects', returnGeometry:true, outSR:4326, maxAllowableOffset:px*2, resultRecordCount:600};
+    const params={geometry:[b.getWest(),b.getSouth(),b.getEast(),b.getNorth()].join(','), geometryType:'esriGeometryEnvelope', inSR:4326, spatialRel:'esriSpatialRelIntersects', returnGeometry:true, outSR:4326, maxAllowableOffset:px*2};
     try{
       let j;
       if(o.st==='QLD') j=await getJSON(QLD_CAD+'/4/query', Object.assign({outFields:'lotplan,lot,plan'}, params));
@@ -1789,6 +1789,9 @@ map.on('moveend', ()=>{ clearTimeout(lblT); lblT=setTimeout(refreshParcelLabels,
 /* ---------- layers tab ---------- */
 function renderLayersTab(){
   $('#baselist').replaceChildren(...BASE_DEFS.map(d=> el('label',{className:'lyr',style:'margin:0;color:var(--text)'}, el('input',{type:'radio',name:'base',checked:d.name===baseName,onchange:()=>setBase(d.name)}), el('span',null,d.name))),
+    el('label',{className:'lyr',style:'margin:8px 0 0;color:var(--text);font-weight:600;border:1px solid var(--blue);border-radius:10px;padding:8px 10px'},
+      el('input',{type:'checkbox',checked:OVERLAYS.filter(o=>o.labels).every(o=>ovState[o.id]&&ovState[o.id].on),onchange:e=>{ OVERLAYS.filter(o=>o.labels).forEach(o=>{ ovState[o.id]=ovState[o.id]||{on:false,op:o.op}; ovState[o.id].on=e.target.checked; }); store(KEY+'-ovl',ovState); renderLayersTab(); refreshParcelLabels(); if(e.target.checked && map.getZoom()<LBL_MINZOOM) toast('Zoom in closer to see the lot & plan numbers'); }}),
+      el('span',null,'Show lot & plan numbers on every parcel (QLD & NSW)')),
     el('div',{className:'hint',style:'margin-top:6px'},'Street View: click anywhere on the map, then choose Google Street View.'));
   ['QLD','NSW'].forEach(st=>{
     $('#ovl-'+st).replaceChildren(...OVERLAYS.filter(o=>o.st===st).map(o=>{
