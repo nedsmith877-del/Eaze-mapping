@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="app-version" content="202611242143">
+<meta name="app-version" content="202611250201">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Easy Mapping</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -291,7 +291,7 @@ body.snapping #ovsum{display:none!important}
         <input type="file" id="phfile" accept="image/jpeg,image/*" multiple hidden>
         <div class="hint">Photos taken on a phone with location turned on are pinned where they were taken. Photos without a location can be placed by clicking the map.</div>
         <div id="phlist"></div>
-        <div class="acts" id="phexp" style="display:none"><button class="btn sec small" id="phkmz">Google Earth with photos (.kmz)</button><button class="btn sec small" id="phkml">Points only (.kml)</button></div>
+        <div class="acts" id="phexp" style="display:none"><button class="btn sec small" id="phkmz">Google Earth with photos (.kmz)</button><button class="btn sec small" id="phkml">Points only (.kml)</button><button class="btn sec small" id="phclear" style="color:var(--danger)">Remove all photos</button></div>
       </div>
     </section>
 
@@ -1830,6 +1830,13 @@ function drawPhotos(){
   setTimeout(renderMapKey,0);
   const on=$('#phshow').checked; if(on && !map.hasLayer(photoLayer)) photoLayer.addTo(map); if(!on) map.removeLayer(photoLayer);
 }
+async function clearPhotos(){
+  if(!photos.length) return;
+  if(!confirmSafe(`Remove all ${photos.length} photo${photos.length===1?'':'s'}? This can't be undone.`)) return;
+  for(const ph of photos){ await idbDel(ph.id); if(phUrls[ph.id]){ URL.revokeObjectURL(phUrls[ph.id]); delete phUrls[ph.id]; } }
+  photos=[]; placingPhoto=null; document.body.classList.remove('placing'); savePhotos(); drawPhotos(); renderPhotos(); toast('All photos removed');
+}
+document.getElementById('phclear').onclick=clearPhotos;
 function renderPhotos(){
   $('#phcount').textContent = photos.length?`(${photos.length})`:''; $('#phexp').style.display = photos.length?'flex':'none';
   $('#phlist').replaceChildren(...photos.map(ph=>{
