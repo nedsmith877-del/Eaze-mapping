@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="app-version" content="202611250201">
+<meta name="app-version" content="202611250342">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Easy Mapping</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -287,11 +287,11 @@ body.snapping #ovsum{display:none!important}
 
       <h2>Site photos <span id="phcount" style="color:var(--muted);font-weight:400"></span></h2>
       <div class="entry" style="padding:12px">
-        <div class="acts" style="margin-top:0"><button class="btn" id="phadd">📷 Add photos</button><label class="lyr" style="margin:0;color:var(--text)"><input type="checkbox" id="phshow" checked><span>Show on map</span></label></div>
+        <div class="acts" style="margin-top:0"><button class="btn" id="phadd">📷 Add photos</button><button class="btn sec" id="phclear" style="color:var(--danger);display:none">🗑️ Remove all</button><label class="lyr" style="margin:0;color:var(--text)"><input type="checkbox" id="phshow" checked><span>Show on map</span></label></div>
         <input type="file" id="phfile" accept="image/jpeg,image/*" multiple hidden>
         <div class="hint">Photos taken on a phone with location turned on are pinned where they were taken. Photos without a location can be placed by clicking the map.</div>
         <div id="phlist"></div>
-        <div class="acts" id="phexp" style="display:none"><button class="btn sec small" id="phkmz">Google Earth with photos (.kmz)</button><button class="btn sec small" id="phkml">Points only (.kml)</button><button class="btn sec small" id="phclear" style="color:var(--danger)">Remove all photos</button></div>
+        <div class="acts" id="phexp" style="display:none"><button class="btn sec small" id="phkmz">Google Earth with photos (.kmz)</button><button class="btn sec small" id="phkml">Points only (.kml)</button></div>
       </div>
     </section>
 
@@ -1838,7 +1838,7 @@ async function clearPhotos(){
 }
 document.getElementById('phclear').onclick=clearPhotos;
 function renderPhotos(){
-  $('#phcount').textContent = photos.length?`(${photos.length})`:''; $('#phexp').style.display = photos.length?'flex':'none';
+  $('#phcount').textContent = photos.length?`(${photos.length})`:''; $('#phexp').style.display = photos.length?'flex':'none'; $('#phclear').style.display = photos.length?'':'none';
   $('#phlist').replaceChildren(...photos.map(ph=>{
     const img=el('img',{alt:'',title:'Show on map',onclick:()=>{ if(ph.lat==null) return; map.setView([ph.lat,ph.lon], Math.max(map.getZoom(),16)); photoLayer.eachLayer(l=>{ const ll=l.getLatLng(); if(ll.lat===ph.lat&&ll.lng===ph.lon) l.openPopup(); }); }});
     phURL(ph).then(u=>img.src=u);
