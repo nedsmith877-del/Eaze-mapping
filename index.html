@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="app-version" content="202611252049">
+<meta name="app-version" content="202611252050">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Easy Mapping</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -770,7 +770,7 @@ function renderList(){
     p.lots.forEach(l=>{ const a=Object.entries(l.attrs||{}).filter(([k,v])=>v!=null && v!==''); if(a.length){ attrsRows.push(el('tr',{className:'subh'}, el('td',{colSpan:2}, l.id))); a.forEach(([k,v])=>attrsRows.push(el('tr',null, el('td',null,k), el('td',null,String(v))))); } });
     const addIn = el('input',{type:'text',placeholder:'Add lot e.g. 4RP123456'});
     const body = el('div',{className:'body'},
-      el('div',{className:'row'}, el('div',null, el('label',null,'Name'), el('input',{type:'text',value:p.name,onchange:e=>{ p.name=e.target.value||p.name; save(); drawProp(p); renderList(); }})), el('div',null, el('label',null,'Category'), catSel)),
+      el('div',{className:'row'}, el('div',null, el('label',{style:'display:flex;align-items:center;gap:8px'},'Name', el('span',{style:'flex:1'}), el('label',{title:'Adds LAWD to the name in Google Earth (.kml) downloads',style:'display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:600;text-transform:none;letter-spacing:0;cursor:pointer'}, el('input',{type:'checkbox',checked:!!p.lawd,style:'width:auto;margin:0',onchange:e=>{ p.lawd=e.target.checked; save(); }}), 'LAWD in .kml')), el('input',{type:'text',value:p.name,onchange:e=>{ p.name=e.target.value||p.name; save(); drawProp(p); renderList(); }})), el('div',null, el('label',null,'Category'), catSel)),
       el('label',null,'Colour'), swatches,
       el('label',null,'Fill strength'), fillR,
       saleEditor(p),
@@ -781,7 +781,7 @@ function renderList(){
       el('div',{className:'row',style:'margin-top:8px'}, addIn, el('button',{className:'btn small',style:'flex:none',onclick:async e=>{ const v=addIn.value.trim(); if(!v) return; e.target.disabled=true; await addLotsTo(p, splitTitles(v), 'auto'); e.target.disabled=false; }},'Add lot')),
       el('div',{className:'acts'},
         el('button',{className:'btn small',onclick:()=>zoomTo(p)},'Zoom to'),
-        el('button',{className:'btn sec small',onclick:()=>download(`${safeName(p.name)}.kml`, buildKML([p], p.name),'application/vnd.google-earth.kml+xml')},'Google Earth (.kml)'),
+        el('button',{className:'btn sec small',onclick:()=>download(`${safeName(kmlName(p))}.kml`, buildKML([p], kmlName(p)),'application/vnd.google-earth.kml+xml')},'Google Earth (.kml)'),
         el('button',{className:'btn small',onclick:e=>runReport(p, e.target.closest('.body').querySelector('.report'))},'Land, vegetation & flood report'),
         el('button',{className:'btn sec small',onclick:()=>{ if(!confirmSafe(`Delete ${p.name}?`)) return; props=props.filter(x=>x!==p); if(propLayers[p.id]) propGroup.removeLayer(propLayers[p.id]); delete propLayers[p.id]; save(); renderList(); }},'Delete')),
       el('div',{className:'report'}, p.report? renderReport(p.report):null),
@@ -2098,8 +2098,9 @@ $('#expcsv').onclick=()=>{
   props.forEach(p=>p.lots.forEach(l=>rows.push([p.name,(catById(p.cat)||{}).name,l.state,l.id,(l.calcArea/10000).toFixed(4),l.titleArea?(l.titleArea/10000).toFixed(4):'',(l.calcArea/4046.8564224).toFixed(2)])));
   download(`easy-mapping-areas-${stamp()}.csv`, rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv');
 };
+const kmlName = p=> p.lawd ? `LAWD ${p.name}` : p.name;
 function buildKML(list, title, labelFn){
-  const nameOf = labelFn || (p=>p.name);
+  const nameOf = labelFn || kmlName;
   const x=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const kcol=(hex,a)=>{ const h=hex.replace('#',''); return a+h.slice(4,6)+h.slice(2,4)+h.slice(0,2); };
   const ring=r=>`<LinearRing><tessellate>1</tessellate><coordinates>${r.map(c=>c[0]+','+c[1]+',0').join(' ')}</coordinates></LinearRing>`;
