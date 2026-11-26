@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="app-version" content="202611252052">
+<meta name="app-version" content="202611260129">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Easy Mapping</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2115,11 +2115,13 @@ function buildKML(list, title, labelFn){
   const styles = [...new Set(list.map(p=>p.color))].map(c=>`<Style id="c${c.slice(1)}"><LineStyle><color>${kcol(c,'ff')}</color><width>3</width></LineStyle><PolyStyle><color>${kcol(c,'59')}</color></PolyStyle><LabelStyle><scale>0</scale></LabelStyle></Style><Style id="l${c.slice(1)}"><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle></Style><Style id="p${c.slice(1)}"><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle><LineStyle><color>${kcol(c,'ff')}</color><width>3</width></LineStyle><PolyStyle><color>${kcol(c,'59')}</color></PolyStyle></Style>`).join('');
   const desc = p=>{ const cat=(catById(p.cat)||{}).name||'';
     return `<![CDATA[<table style="font-family:Arial;font-size:12px;border-collapse:collapse"><tr><td colspan="2" style="background:#00213F;color:#fff;padding:4px 6px;font-weight:bold">${x(nameOf(p))}</td></tr><tr><td style="padding:3px 6px">Category</td><td>${x(cat)}</td></tr><tr><td style="padding:3px 6px">Area</td><td>${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)</td></tr>${p.sale&&p.sale.price?`<tr><td style="padding:3px 6px">Price</td><td>${money(p.sale.price)} (${money(p.sale.price/(p.area/10000))}/ha)${p.sale.date?' · '+x(fmtDate(p.sale.date)):''}</td></tr>`:''}${p.titleArea?`<tr><td style="padding:3px 6px">Title area</td><td>${fmt(p.titleArea/10000)} ha</td></tr>`:''}<tr><td style="padding:3px 6px;background:#B4D7EB" colspan="2">Lots</td></tr>${p.lots.map(l=>`<tr><td style="padding:3px 6px">${x(l.state)} ${x(l.id)}</td><td>${fmt(l.calcArea/10000)} ha</td></tr>`).join('')}</table>]]>`; };
-  const folders = list.map(p=>{ if(!p.lots.length) return '';
-    const c = geoBounds(p.lots.map(l=>l.geo)).getCenter();
+  const styleOf = c=>`<Style><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle><LineStyle><color>${kcol(c,'ff')}</color><width>3</width></LineStyle><PolyStyle><color>${kcol(c,'59')}</color></PolyStyle><BalloonStyle><text>$[description]</text></BalloonStyle></Style>`;
+  const pm = p=>{ const c = geoBounds(p.lots.map(l=>l.geo)).getCenter();
     const polys = p.lots.map(l=> (l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates).map(poly).join('')).join('');
-    return `<Placemark><name>${x(nameOf(p))}</name><description>${desc(p)}</description><styleUrl>#p${p.color.slice(1)}</styleUrl><MultiGeometry><Point><coordinates>${c.lng},${c.lat},0</coordinates></Point>${polys}</MultiGeometry></Placemark>`; }).join('');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(title)}</name><open>1</open>${styles}${folders}</Document></kml>`;
+    return `<Placemark><name>${x(nameOf(p))}</name><Snippet maxLines="0"></Snippet><description>${desc(p)}</description>${styleOf(p.color)}<MultiGeometry><Point><coordinates>${c.lng},${c.lat},0</coordinates></Point>${polys}</MultiGeometry></Placemark>`; };
+  const withLots = list.filter(p=>p.lots.length);
+  const inner = withLots.length===1 ? pm(withLots[0]) : withLots.map(p=>`<Folder><name>${x(nameOf(p))}</name><Snippet maxLines="0"></Snippet><open>0</open>${pm(p)}</Folder>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Folder><name>${x(title)}</name><Snippet maxLines="0"></Snippet><open>1</open>${inner}</Folder></kml>`;
 }
 const safeName = s=>String(s).replace(/[^A-Za-z0-9 _-]+/g,'').trim().replace(/\s+/g,'-')||'property';
 $('#expkml').onclick=()=>{ if(!props.length){ toast('No properties to export', true); return; } download(`easy-mapping-properties-${stamp()}.kml`, buildKML(props,'Easy Mapping properties'),'application/vnd.google-earth.kml+xml'); };
