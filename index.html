@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="app-version" content="202611260259">
+<meta name="app-version" content="202611260300">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Easy Mapping</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2116,9 +2116,11 @@ function buildKML(list, title, labelFn){
   const desc = p=>{ const cat=(catById(p.cat)||{}).name||'';
     return `<![CDATA[<table style="font-family:Arial;font-size:12px;border-collapse:collapse"><tr><td style="padding:3px 6px">Category</td><td>${x(cat)}</td></tr><tr><td style="padding:3px 6px">Area</td><td>${fmt(p.area/10000)} ha (${fmt(p.area/4046.8564224)} ac)</td></tr>${p.sale&&p.sale.price?`<tr><td style="padding:3px 6px">Price</td><td>${money(p.sale.price)} (${money(p.sale.price/(p.area/10000))}/ha)${p.sale.date?' · '+x(fmtDate(p.sale.date)):''}</td></tr>`:''}${p.titleArea?`<tr><td style="padding:3px 6px">Title area</td><td>${fmt(p.titleArea/10000)} ha</td></tr>`:''}<tr><td style="padding:3px 6px;background:#B4D7EB" colspan="2">Lots</td></tr>${p.lots.map(l=>`<tr><td style="padding:3px 6px">${x(l.state)} ${x(l.id)}</td><td>${fmt(l.calcArea/10000)} ha</td></tr>`).join('')}</table>]]>`; };
   const styleOf = c=>`<Style><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle><LineStyle><color>${kcol(c,'ff')}</color><width>3</width></LineStyle><PolyStyle><color>${kcol(c,'59')}</color></PolyStyle><BalloonStyle><text><![CDATA[<b style="font-family:Arial;font-size:14px">$[name]</b><br/>$[description]]]></text></BalloonStyle><ListStyle><listItemType>check</listItemType></ListStyle></Style>`;
+  const labelStyle = `<Style><IconStyle><scale>0</scale></IconStyle><LabelStyle><color>ffffffff</color><scale>1.1</scale></LabelStyle></Style>`;
   const pm = p=>{ const c = geoBounds(p.lots.map(l=>l.geo)).getCenter();
-    const polys = p.lots.map(l=> (l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates).map(poly).join('')).join('');
-    return `<Placemark><name>${x(nameOf(p))}</name><Snippet maxLines="0"></Snippet><description>${desc(p)}</description>${styleOf(p.color)}<MultiGeometry><Point><coordinates>${c.lng},${c.lat},0</coordinates></Point>${polys}</MultiGeometry></Placemark>`; };
+    const label = `<Placemark><name>${x(nameOf(p))}</name><Snippet maxLines="0"></Snippet><description>${desc(p)}</description>${labelStyle}<Point><coordinates>${c.lng},${c.lat},0</coordinates></Point></Placemark>`;
+    const lots = p.lots.map(l=>`<Placemark><name>${x(l.id)}</name><Snippet maxLines="0"></Snippet><description>${desc(p)}</description>${styleOf(p.color)}<MultiGeometry>${(l.geo.type==='Polygon'?[l.geo.coordinates]:l.geo.coordinates).map(poly).join('')}</MultiGeometry></Placemark>`).join('');
+    return label+lots; };
   const withLots = list.filter(p=>p.lots.length);
   const inner = withLots.length===1 ? pm(withLots[0]) : withLots.map(p=>`<Folder><name>${x(nameOf(p))}</name><open>0</open><Snippet maxLines="0"></Snippet>${pm(p)}</Folder>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Folder><name>${x(title)}</name><open>1</open><Snippet maxLines="0"></Snippet>${inner}</Folder></kml>`;
